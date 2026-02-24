@@ -1,0 +1,15 @@
+node_modules
+.localdb.json
+.env
+.env.local
+.next
+dist
+coverage
+tmp
+*.log
+certs/afip/*.pem
+certs/afip/*.key
+certs/afip/*.crt
+certs/afip/*.pfx
+
+.vercel

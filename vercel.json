@@ -1,0 +1,21 @@
+{
+  "buildCommand": "npm run build",
+  "crons": [
+    {
+      "path": "/api/confirmaciones/diarias",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/recordatorios/enviar",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/facturas/reintentos",
+      "schedule": "15 2 * * *"
+    },
+    {
+      "path": "/api/storage/cleanup",
+      "schedule": "30 3 * * *"
+    }
+  ]
+}

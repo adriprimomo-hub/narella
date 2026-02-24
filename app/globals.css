@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand palette */
+  --brand-primary: #e5568a;
+  --brand-primary-strong: #d9457c;
+  --brand-secondary: #f4f5f7;
+  --brand-secondary-strong: #e5e7eb;
+  --brand-foreground: #111322;
+  --brand-muted: #6b7280;
+  --brand-surface: #ffffff;
+  --brand-border: #e5e7eb;
+  --brand-danger: #e54848;
+  --brand-success: #10b981;
+  --brand-warning: #f59e0b;
+  --brand-info: #0ea5e9;
+
+  /* Shared sizing tokens */
+  --radius: 0.75rem;
+  --control-height: 2.75rem;
+  --control-height-sm: 2.25rem;
+  --control-height-lg: 3rem;
+  --control-min-height: 4rem;
+  --card-padding: 1.5rem;
+  --gap: 0.75rem;
+  --container-max: 80rem;
+  --page-padding: 1rem;
+  --page-padding-lg: 1.5rem;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Typography scale */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 0.9375rem;
+  --font-size-lg: 1rem;
+  --font-size-xl: 1.125rem;
+  --font-size-2xl: 1.25rem;
+  --font-size-3xl: 1.5rem;
+  --font-size-4xl: 1.875rem;
+  --line-height-tight: 1.2;
+  --line-height-base: 1.5;
+  --line-height-relaxed: 1.65;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 1px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 10px 24px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 20px 48px rgba(15, 23, 42, 0.18);
+
+  /* Status colors */
+  --status-success: var(--brand-success);
+  --status-warning: var(--brand-warning);
+  --status-danger: var(--brand-danger);
+  --status-info: var(--brand-info);
+  --status-neutral: #64748b;
+  --status-success-bg: color-mix(in oklab, var(--status-success) 16%, white);
+  --status-warning-bg: color-mix(in oklab, var(--status-warning) 16%, white);
+  --status-danger-bg: color-mix(in oklab, var(--status-danger) 16%, white);
+  --status-info-bg: color-mix(in oklab, var(--status-info) 16%, white);
+  --status-neutral-bg: color-mix(in oklab, var(--status-neutral) 12%, white);
+  --status-success-border: color-mix(in oklab, var(--status-success) 32%, white);
+  --status-warning-border: color-mix(in oklab, var(--status-warning) 32%, white);
+  --status-danger-border: color-mix(in oklab, var(--status-danger) 32%, white);
+  --status-info-border: color-mix(in oklab, var(--status-info) 32%, white);
+  --status-neutral-border: color-mix(in oklab, var(--status-neutral) 24%, white);
+  --status-success-fg: color-mix(in oklab, var(--status-success) 75%, black);
+  --status-warning-fg: color-mix(in oklab, var(--status-warning) 75%, black);
+  --status-danger-fg: color-mix(in oklab, var(--status-danger) 75%, black);
+  --status-info-fg: color-mix(in oklab, var(--status-info) 75%, black);
+  --status-neutral-fg: color-mix(in oklab, var(--status-neutral) 75%, black);
+
+  /* Z-index */
+  --z-dropdown: 30;
+  --z-sticky: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+
+  --background: var(--brand-surface);
+  --foreground: var(--brand-foreground);
+  --card: var(--brand-surface);
+  --card-foreground: var(--brand-foreground);
+  --popover: var(--brand-surface);
+  --popover-foreground: var(--brand-foreground);
+  --primary: var(--brand-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-secondary);
+  --secondary-foreground: var(--brand-foreground);
+  --muted: #f7f7f8;
+  --muted-foreground: var(--brand-muted);
+  --accent: #fde7f1;
+  --accent-foreground: var(--brand-foreground);
+  --destructive: var(--brand-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--brand-border);
+  --input: var(--brand-border);
+  --ring: var(--brand-primary);
+  --chart-1: var(--brand-primary);
+  --chart-2: #7c3aed;
+  --chart-3: #0ea5e9;
+  --chart-4: #f97316;
+  --chart-5: #06b6d4;
+}
+
+.dark {
+  --background: #0f1115;
+  --foreground: #f5f6f7;
+  --card: #16181d;
+  --card-foreground: #f5f6f7;
+  --popover: #16181d;
+  --popover-foreground: #f5f6f7;
+  --primary: #f074a8;
+  --primary-foreground: #240b18;
+  --secondary: #1d2027;
+  --secondary-foreground: #f5f6f7;
+  --muted: #1b1e24;
+  --muted-foreground: #a9b0ba;
+  --accent: #2a1c24;
+  --accent-foreground: #f5f6f7;
+  --destructive: #f26b6b;
+  --destructive-foreground: #240b18;
+  --border: #2b2f36;
+  --input: #2b2f36;
+  --ring: #f074a8;
+  --chart-1: #f074a8;
+  --chart-2: #a78bfa;
+  --chart-3: #38bdf8;
+  --chart-4: #fb923c;
+  --chart-5: #22d3ee;
+  --status-success: #22c55e;
+  --status-warning: #fbbf24;
+  --status-danger: #f26b6b;
+  --status-info: #38bdf8;
+  --status-neutral: #94a3b8;
+  --status-success-bg: color-mix(in oklab, var(--status-success) 18%, black);
+  --status-warning-bg: color-mix(in oklab, var(--status-warning) 18%, black);
+  --status-danger-bg: color-mix(in oklab, var(--status-danger) 18%, black);
+  --status-info-bg: color-mix(in oklab, var(--status-info) 18%, black);
+  --status-neutral-bg: color-mix(in oklab, var(--status-neutral) 14%, black);
+  --status-success-border: color-mix(in oklab, var(--status-success) 32%, black);
+  --status-warning-border: color-mix(in oklab, var(--status-warning) 32%, black);
+  --status-danger-border: color-mix(in oklab, var(--status-danger) 32%, black);
+  --status-info-border: color-mix(in oklab, var(--status-info) 32%, black);
+  --status-neutral-border: color-mix(in oklab, var(--status-neutral) 26%, black);
+  --status-success-fg: color-mix(in oklab, var(--status-success) 70%, white);
+  --status-warning-fg: color-mix(in oklab, var(--status-warning) 70%, white);
+  --status-danger-fg: color-mix(in oklab, var(--status-danger) 70%, white);
+  --status-info-fg: color-mix(in oklab, var(--status-info) 70%, white);
+  --status-neutral-fg: color-mix(in oklab, var(--status-neutral) 70%, white);
+}
+
+@theme inline {
+  --font-sans: var(--font-sans-base);
+  --font-mono: var(--font-mono-base);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-base);
+  }
+
+  h1 {
+    font-size: var(--font-size-3xl);
+    line-height: var(--line-height-tight);
+    @apply font-semibold tracking-tight;
+  }
+
+  h2 {
+    font-size: var(--font-size-2xl);
+    line-height: var(--line-height-tight);
+    @apply font-semibold tracking-tight;
+  }
+
+  h3 {
+    font-size: var(--font-size-xl);
+    line-height: var(--line-height-tight);
+    @apply font-semibold tracking-tight;
+  }
+
+  p,
+  label,
+  span,
+  input,
+  select,
+  textarea {
+    font-size: var(--font-size-base);
+  }
+}
+
+/* Design tokens usage (quick guide)
+ * 1) Spacing: use `var(--space-*)` → `p-[var(--space-4)]`, `gap-[var(--space-3)]`.
+ * 2) Controls: heights → `h-[var(--control-height)]`, `h-[var(--control-height-sm)]`.
+ * 3) Radius: `rounded-[var(--radius-md)]`, `rounded-[var(--radius-xl)]`, `rounded-full` for pills.
+ * 4) Shadows: `shadow-[var(--shadow-xs)]` / `shadow-[var(--shadow-sm)]`.
+ * 5) Typography: rely on `h1/h2/h3`; base text uses `--font-size-base`.
+ * 6) Colors: use semantic vars `--primary`, `--accent`, `--muted`, `--status-*`.
+ * 7) Status badges: `<Badge variant=\"success|warning|info|danger|neutral\" />`.
+ * 8) Layout: `max-w-[var(--container-max)]` + `px-[var(--page-padding)]`.
+ * 9) Panels: `bg-card border rounded-[var(--radius-xl)] shadow-[var(--shadow-xs)]`.
+ * 10) Z-index: use `--z-dropdown`, `--z-modal`, `--z-toast`.
+ */
