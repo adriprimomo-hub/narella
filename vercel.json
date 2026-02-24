@@ -1,5 +1,9 @@
 {
   "buildCommand": "npm run build",
+  "env": {
+    "AFIP_CERT_PATH": "certs/afip/cert.crt",
+    "AFIP_KEY_PATH": "certs/afip/key.pem"
+  },
   "crons": [
     {
       "path": "/api/confirmaciones/diarias",

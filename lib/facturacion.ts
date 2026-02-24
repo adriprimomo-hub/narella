@@ -237,7 +237,7 @@ const isAfipSdkMissingCertKeyError = (error: any) => {
 }
 
 const missingCertKeyMessage =
-  "AFIP SDK requiere certificado y clave para operar WSFE. Configura AFIP_CERT y AFIP_KEY (o ARCA_CERT/ARCA_KEY) en Vercel; AFIP_CERT_PATH local no existe en el deploy."
+  "AFIP SDK requiere certificado y clave para operar WSFE. Configura AFIP_CERT y AFIP_KEY (o ARCA_CERT/ARCA_KEY), o AFIP_CERT_PATH/AFIP_KEY_PATH apuntando a archivos incluidos en el deploy de Vercel."
 
 const formatAfipError = (context: string, error: any) => {
   const status = typeof error?.status === "number" ? error.status : null
