@@ -13,21 +13,11 @@ import { InsumosPanel } from "@/components/inventario/insumos-panel"
 import { ProductosPanel } from "@/components/productos/productos-panel"
 import { CajaPanel } from "@/components/caja/caja-panel"
 import { StaffTurnosPanel } from "@/components/staff/staff-turnos-panel"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useIsMobile } from "@/components/ui/use-mobile"
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import useSWR from "swr"
-import { ChevronDownIcon } from "lucide-react"
 import { normalizeRole } from "@/lib/roles"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -72,7 +62,6 @@ function DashboardContent() {
   const isStaff = role === "staff"
   const isRecepcion = role === "recepcion"
   const isCaja = role === "caja"
-  const isMobile = useIsMobile()
   const allowedTabs = useMemo(
     () => {
       if (isAdmin) {
@@ -110,27 +99,21 @@ function DashboardContent() {
 
   const tabsConfig = useMemo(
     () => [
-      { key: "turnos", label: "Turnos", category: "turnos" },
-      { key: "caja", label: "Caja", category: "administracion" },
-      { key: "finanzas", label: "Finanzas", category: "administracion" },
-      { key: "reportes", label: "Reportes", category: "administracion" },
-      { key: "facturas", label: "Facturas", category: "administracion" },
-      { key: "servicios", label: "Servicios", category: "gestion" },
-      { key: "giftcards", label: "Gift Cards", category: "gestion" },
-      { key: "clientes", label: "Clientes", category: "gestion" },
-      { key: "personal", label: "Personal", category: "gestion" },
-      { key: "productos", label: "Productos", category: "inventario" },
-      { key: "inventario", label: "Insumos", category: "inventario" },
+      { key: "turnos", label: "Turnos" },
+      { key: "caja", label: "Caja" },
+      { key: "finanzas", label: "Finanzas" },
+      { key: "reportes", label: "Reportes" },
+      { key: "facturas", label: "Facturas" },
+      { key: "servicios", label: "Servicios" },
+      { key: "giftcards", label: "Gift Cards" },
+      { key: "clientes", label: "Clientes" },
+      { key: "personal", label: "Personal" },
+      { key: "productos", label: "Productos" },
+      { key: "inventario", label: "Insumos" },
     ],
     [],
   )
-  const primaryTabKeys = useMemo(
-    () => (isMobile ? new Set(["turnos"]) : new Set(["turnos"])),
-    [isMobile],
-  )
   const availableTabs = useMemo(() => tabsConfig.filter((item) => allowedTabs.has(item.key)), [tabsConfig, allowedTabs])
-  const primaryTabs = useMemo(() => availableTabs.filter((item) => primaryTabKeys.has(item.key)), [availableTabs, primaryTabKeys])
-  const secondaryTabs = useMemo(() => availableTabs.filter((item) => !primaryTabKeys.has(item.key)), [availableTabs, primaryTabKeys])
 
   useEffect(() => {
     const current = searchParams.get("tab") || ""
@@ -181,121 +164,21 @@ function DashboardContent() {
       <div className="mx-auto max-w-[var(--container-max)]">
 
         <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-          {isMobile ? (
-            <div className="w-full max-w-sm">
-              <p className="mb-1 text-xs text-muted-foreground">Sección</p>
-              <Select value={tab} onValueChange={handleTabChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona una sección" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTabs.map((item) => (
-                    <SelectItem key={item.key} value={item.key}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <TabsList className="flex w-full flex-wrap items-center justify-start gap-2 h-auto">
-              {primaryTabs.map((item) => (
-                <TabsTrigger key={item.key} value={item.key} className="sm:flex-none">
-                  {item.label}
-                </TabsTrigger>
-              ))}
-
-              {/* Administración */}
-              {secondaryTabs.some((t) => t.category === "administracion") && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={secondaryTabs.some((t) => t.category === "administracion" && t.key === tab) ? "secondary" : "outline"}
-                      className="gap-1.5"
-                    >
-                      Administración
-                      <ChevronDownIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-40">
-                    {secondaryTabs
-                      .filter((t) => t.category === "administracion")
-                      .map((item) => (
-                        <DropdownMenuItem
-                          key={item.key}
-                          onSelect={() => handleTabChange(item.key)}
-                          className={item.key === tab ? "font-medium" : undefined}
-                        >
-                          {item.label}
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* Gestión */}
-              {secondaryTabs.some((t) => t.category === "gestion") && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={secondaryTabs.some((t) => t.category === "gestion" && t.key === tab) ? "secondary" : "outline"}
-                      className="gap-1.5"
-                    >
-                      Gestión
-                      <ChevronDownIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-40">
-                    {secondaryTabs
-                      .filter((t) => t.category === "gestion")
-                      .map((item) => (
-                        <DropdownMenuItem
-                          key={item.key}
-                          onSelect={() => handleTabChange(item.key)}
-                          className={item.key === tab ? "font-medium" : undefined}
-                        >
-                          {item.label}
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* Inventario */}
-              {secondaryTabs.some((t) => t.category === "inventario") && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={secondaryTabs.some((t) => t.category === "inventario" && t.key === tab) ? "secondary" : "outline"}
-                      className="gap-1.5"
-                    >
-                      Inventario
-                      <ChevronDownIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-40">
-                    {secondaryTabs
-                      .filter((t) => t.category === "inventario")
-                      .map((item) => (
-                        <DropdownMenuItem
-                          key={item.key}
-                          onSelect={() => handleTabChange(item.key)}
-                          className={item.key === tab ? "font-medium" : undefined}
-                        >
-                          {item.label}
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </TabsList>
-          )}
+          <div className="w-full max-w-sm">
+            <p className="mb-1 text-xs text-muted-foreground">Sección</p>
+            <Select value={tab} onValueChange={handleTabChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecciona una sección" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTabs.map((item) => (
+                  <SelectItem key={item.key} value={item.key}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {allowedTabs.has("turnos") && (
             <TabsContent value="turnos" className="mt-6">
