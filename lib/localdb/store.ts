@@ -483,6 +483,7 @@ export const db: any = {
   servicio_empleada_comisiones: [],
   producto_empleada_comisiones: [] as ProductoEmpleadaComision[],
   recordatorios: [],
+  servicio_vencido_recordatorios: [],
   confirmation_tokens: [],
   share_links: [] as ShareLink[],
   empleada_ausencias: [] as EmpleadaAusencia[],
@@ -631,6 +632,20 @@ const ensureShareLinksTable = () => {
 }
 
 ensureShareLinksTable()
+
+const ensureServicioVencidoRecordatoriosTable = () => {
+  if (!("servicio_vencido_recordatorios" in db)) {
+    ;(db as any).servicio_vencido_recordatorios = []
+    persistLocalDb(db as any)
+    return
+  }
+  if (!Array.isArray((db as any).servicio_vencido_recordatorios)) {
+    ;(db as any).servicio_vencido_recordatorios = []
+    persistLocalDb(db as any)
+  }
+}
+
+ensureServicioVencidoRecordatoriosTable()
 
 const ensureConfiguracionTable = () => {
   if (!("configuracion" in db) || !Array.isArray((db as any).configuracion)) {

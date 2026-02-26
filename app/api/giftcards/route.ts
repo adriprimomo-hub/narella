@@ -10,6 +10,7 @@ import {
   sugerirNumeroFacturaLocal,
   type FacturaRetryPayload,
 } from "@/lib/facturas-registro"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const giftcardSchema = z.object({
   cliente_id: z.string().min(1),
@@ -75,6 +76,8 @@ export async function GET(request: Request) {
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : null
   const pageParam = Number.parseInt(url.searchParams.get("page") || "", 10)
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : null
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
+  const paginationEnabled = url.searchParams.has("page_size")
 
   let query = db
     .from("giftcards")
@@ -119,6 +122,28 @@ export async function GET(request: Request) {
         ? row.servicios.map((s: any) => s?.nombre || "").join(" ").toLowerCase()
         : ""
       return cliente.includes(term) || numero.includes(term) || deParte.includes(term) || servicios.includes(term)
+    })
+  }
+
+  if (paginationEnabled) {
+    const total = results.length
+    const start = (pagination.page - 1) * pagination.pageSize
+    const rows = results.slice(start, start + pagination.pageSize + 1)
+    const hasNext = rows.length > pagination.pageSize
+    const items = hasNext ? rows.slice(0, pagination.pageSize) : rows
+    const enriched = items.map((row: any) => ({
+      ...sanitizeGiftcardRow(row),
+      vigente: isVigente(row, now),
+    }))
+    const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize))
+
+    return NextResponse.json({
+      items: enriched,
+      pagination: {
+        ...buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+        total,
+        total_pages: totalPages,
+      },
     })
   }
 

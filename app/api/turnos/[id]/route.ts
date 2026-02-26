@@ -10,6 +10,7 @@ import {
   parseDataUrl,
   uploadTurnoWorkPhotoToStorage,
 } from "@/lib/supabase/storage"
+import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -415,6 +416,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const fechaInicioDate = new Date(updatedFechaInicio)
   if (Number.isNaN(fechaInicioDate.getTime())) {
     return NextResponse.json({ error: "Fecha inicio inválida" }, { status: 400 })
+  }
+  const currentFechaInicioMs = new Date(currentTurno.fecha_inicio).getTime()
+  const isReschedule =
+    updates.fecha_inicio !== undefined &&
+    (Number.isNaN(currentFechaInicioMs) || Math.abs(fechaInicioDate.getTime() - currentFechaInicioMs) > 60000)
+  if (isReschedule && !isWithinPastSchedulingWindow(fechaInicioDate)) {
+    return NextResponse.json(
+      { error: `No se pueden agendar turnos con más de ${MAX_TURNO_PAST_SCHEDULE_HOURS} horas en el pasado.` },
+      { status: 409 },
+    )
   }
   if (!Number.isFinite(updatedDuracion) || updatedDuracion <= 0) {
     return NextResponse.json({ error: "Duración inválida" }, { status: 400 })

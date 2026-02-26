@@ -17,8 +17,8 @@ import { FileMinusIcon, FileTextIcon, RefreshCwIcon, SearchIcon } from "lucide-r
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const SEARCH_LIMIT = 50
-const DEFAULT_LIST_LIMIT = 8
-const PAGE_LIMIT = 20
+const DEFAULT_LIST_LIMIT = 60
+const PAGE_LIMIT = 60
 const PAGE_QUERY_LIMIT = PAGE_LIMIT
 
 const useDebouncedValue = <T,>(value: T, delay = 250) => {
@@ -109,6 +109,13 @@ const formatMonto = (row: FacturaRow) => {
   return `${sign}$${Math.abs(total).toFixed(2)}`
 }
 
+const toLocalDateKey = (value: Date) => {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 export function FacturasPanel() {
   const { data: config } = useSWR<Config>("/api/config", fetcher)
   const role = config?.rol
@@ -116,11 +123,12 @@ export function FacturasPanel() {
   const canViewFacturas = isAdmin || role === "recepcion"
 
   const [search, setSearch] = useState("")
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(true)
   const [page, setPage] = useState(1)
   const [tipoFiltro, setTipoFiltro] = useState("all")
   const [estadoFiltro, setEstadoFiltro] = useState("all")
-  const [rango, setRango] = useState({ desde: "", hasta: "" })
+  const todayKey = toLocalDateKey(new Date())
+  const [rango, setRango] = useState({ desde: todayKey, hasta: todayKey })
 
   const debouncedSearch = useDebouncedValue(search.trim(), 300)
   const searchRaw = search.trim()
@@ -318,7 +326,7 @@ export function FacturasPanel() {
             if (search) setSearch("")
           }}
         >
-          {showAll ? "Ver últimos" : "Ver todo"}
+          {showAll ? "Ver últimos 60" : "Ver todo"}
         </Button>
       </div>
 
@@ -409,7 +417,7 @@ export function FacturasPanel() {
             variant="outline"
             className="w-full"
             onClick={() => {
-              setRango({ desde: "", hasta: "" })
+              setRango({ desde: todayKey, hasta: todayKey })
               setTipoFiltro("all")
               setEstadoFiltro("all")
               setSearch("")

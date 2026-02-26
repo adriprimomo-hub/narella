@@ -222,6 +222,35 @@ export function TurnosGrid() {
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(currentWeekStart, index)), [currentWeekStart])
   const selectedKey = toDateKey(selectedDate)
+  const turnosTotalesPorDia = useMemo(() => {
+    const map: Record<string, number> = {}
+    turnos.forEach((turno) => {
+      const fecha = new Date(turno.fecha_inicio)
+      if (!Number.isFinite(fecha.getTime())) return
+      const key = toDateKey(fecha)
+      map[key] = (map[key] || 0) + 1
+    })
+    return map
+  }, [turnos])
+  const turnosDelDia = useMemo(() => {
+    const start = new Date(selectedDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 1)
+
+    return turnos.filter((turno) => {
+      const inicio = new Date(turno.fecha_inicio)
+      return Number.isFinite(inicio.getTime()) && inicio >= start && inicio < end
+    })
+  }, [turnos, selectedDate])
+  const turnosDelDiaPorColumna = useMemo(() => {
+    const map: Record<string, number> = {}
+    turnosDelDia.forEach((turno) => {
+      const key = turno.empleada_id || "sin_asignar"
+      map[key] = (map[key] || 0) + 1
+    })
+    return map
+  }, [turnosDelDia])
   const selectedTurno = useMemo(
     () => (selectedTurnoId ? turnos.find((t) => t.id === selectedTurnoId) || null : null),
     [selectedTurnoId, turnos],
@@ -474,6 +503,7 @@ const slots = useMemo(() => {
 
   const dayLabel = formatDay(selectedDate)
   const weekLabel = `${formatDate(weekDays[0])} - ${formatDate(weekDays[6])}`
+  const totalTurnosDiaSeleccionado = turnosTotalesPorDia[selectedKey] || 0
   const previewFecha = createPreview.fecha || createData.fecha
   const previewEmpleadaId = createPreview.empleada_id ?? createData.empleada_id
 
@@ -542,7 +572,9 @@ const slots = useMemo(() => {
         <div className="flex flex-col gap-3 border-b p-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Día</p>
-            <p className="text-lg font-semibold capitalize">{dayLabel}</p>
+            <p className="text-lg font-semibold capitalize">
+              {dayLabel} <span className="text-sm font-medium text-muted-foreground">{totalTurnosDiaSeleccionado} turnos</span>
+            </p>
             <p className="text-xs text-muted-foreground">Semana {weekLabel}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -553,6 +585,7 @@ const slots = useMemo(() => {
               {weekDays.map((day) => {
                 const key = toDateKey(day)
                 const isSelected = key === selectedKey
+                const totalTurnosDia = turnosTotalesPorDia[key] || 0
                 return (
                   <Button
                     key={key}
@@ -561,12 +594,15 @@ const slots = useMemo(() => {
                     onClick={() => setSelectedDate(day)}
                     className="rounded-full px-3"
                   >
-                    <div className="flex flex-col leading-tight">
-                      <span className="text-[11px] uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      <span>
                         {day
                           .toLocaleDateString("es-AR", { weekday: "short" })
                           .replace(".", "")}{" "}
                         {day.getDate()}
+                      </span>
+                      <span className="text-[10px] normal-case text-muted-foreground">
+                        {totalTurnosDia} turnos
                       </span>
                     </div>
                   </Button>
@@ -590,20 +626,25 @@ const slots = useMemo(() => {
               style={{ gridTemplateColumns: calendarGridTemplate }}
             >
               <div className="px-3 py-4 text-left text-foreground">Horas</div>
-              {columnas.map((col) => (
-                <div key={col.id} className="border-l-2 border-l-border px-3 py-3 text-left">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[12px] font-semibold text-foreground">{col.nombre}</p>
+              {columnas.map((col) => {
+                const totalTurnosColumna = turnosDelDiaPorColumna[col.id] || 0
+                return (
+                  <div key={col.id} className="border-l-2 border-l-border px-3 py-3 text-left">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[12px] font-semibold text-foreground">
+                          {col.nombre} <span className="font-medium text-muted-foreground">{totalTurnosColumna} turnos</span>
+                        </p>
+                      </div>
                     </div>
+                    {col.horario && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {col.horario.desde} - {col.horario.hasta}
+                      </p>
+                    )}
                   </div>
-                  {col.horario && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {col.horario.desde} - {col.horario.hasta}
-                    </p>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="relative grid" style={{ gridTemplateColumns: calendarGridTemplate }}>

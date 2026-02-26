@@ -12,6 +12,7 @@ import { ServicioForm } from "./servicio-form"
 import { PencilIcon, Trash2Icon, SearchIcon, PlusIcon } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const SERVICIOS_PAGE_SIZE = 60
 
 export type Categoria = {
   id: string
@@ -40,8 +41,22 @@ export type Servicio = {
   comision_monto_fijo?: number | null
 }
 
+type ServiciosPageResponse = {
+  items: Servicio[]
+  pagination?: {
+    page: number
+    page_size: number
+    has_prev: boolean
+    has_next: boolean
+  }
+}
+
 export function ServiciosList() {
-  const { data: servicios, mutate } = useSWR<Servicio[]>("/api/servicios?include_inactive=true", fetcher)
+  const [page, setPage] = useState(1)
+  const { data: serviciosResponse, mutate } = useSWR<ServiciosPageResponse>(
+    `/api/servicios?include_inactive=true&page=${page}&page_size=${SERVICIOS_PAGE_SIZE}`,
+    fetcher,
+  )
   const { data: categorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   const { data: recursos } = useSWR<Recurso[]>("/api/recursos", fetcher)
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
@@ -49,6 +64,13 @@ export function ServiciosList() {
   const [selected, setSelected] = useState<Servicio | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState("")
+  const servicios = Array.isArray(serviciosResponse?.items) ? serviciosResponse.items : []
+  const pagination = serviciosResponse?.pagination || {
+    page,
+    page_size: SERVICIOS_PAGE_SIZE,
+    has_prev: page > 1,
+    has_next: false,
+  }
 
   const formatCurrency = (value?: number | null) => {
     if (value === null || value === undefined) return "-"
@@ -100,7 +122,10 @@ export function ServiciosList() {
         <Input
           placeholder="Buscar servicio..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
           className="pl-9"
         />
       </div>
@@ -122,7 +147,7 @@ export function ServiciosList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(servicios || [])
+                {servicios
                   .filter((s) => s.nombre.toLowerCase().includes(search.toLowerCase()))
                   .map((servicio) => (
                     <TableRow key={servicio.id}>
@@ -174,8 +199,38 @@ export function ServiciosList() {
                       )}
                     </TableRow>
                   ))}
+                {servicios.filter((s) => s.nombre.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 8 : 6} className="text-sm text-muted-foreground">
+                      Sin servicios para esta página.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
+          </div>
+          <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">Página {pagination.page}</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_prev}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_next}
+                onClick={() => setPage((prev) => prev + 1)}
+              >
+                Siguiente
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -201,6 +256,7 @@ export function ServiciosList() {
             onSuccess={() => {
               mutate()
               setSelected(null)
+              setPage(1)
               setShowForm(false)
             }}
           />

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/localdb/server"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const cajaSchema = z.object({
   medio_pago: z.string().min(1).optional(),
@@ -18,20 +19,35 @@ export async function GET(request: Request) {
     data: { user },
   } = await db.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const username = user.username || (user.user_metadata as any)?.username || user.id
 
   const url = new URL(request.url)
   const medio = url.searchParams.get("medio_pago")
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
-  let query = db
-    .from("caja_movimientos")
-    .select("*, creado_por, creado_por_username")
-    .eq("usuario_id", user.id)
-    .order("created_at", { ascending: false })
+  const createQuery = () => {
+    let query = db
+      .from("caja_movimientos")
+      .select("*, creado_por, creado_por_username")
+      .eq("usuario_id", user.id)
+      .order("created_at", { ascending: false })
 
-  if (medio) query = query.eq("medio_pago", medio)
+    if (medio) query = query.eq("medio_pago", medio)
+    return query
+  }
 
-  const { data, error } = await query
+  if (pagination.enabled) {
+    const { data, error } = await createQuery().range(pagination.from, pagination.to + 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = Array.isArray(data) ? data : []
+    const hasNext = rows.length > pagination.pageSize
+    const items = hasNext ? rows.slice(0, pagination.pageSize) : rows
+    return NextResponse.json({
+      items,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
+
+  const { data, error } = await createQuery()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

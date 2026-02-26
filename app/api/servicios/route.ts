@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const servicioSchema = z.object({
   nombre: z.string().trim().min(1),
@@ -53,21 +54,47 @@ export async function GET(request: Request) {
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
-  const includeInactive = new URL(request.url).searchParams.get("include_inactive") === "true"
-  let query = db.from("servicios").select("*").eq("usuario_id", user.id)
-  if (!includeInactive) {
-    query = query.eq("activo", true)
-  }
-  const { data: servicios, error } = await query.order("created_at", { ascending: false })
+  const url = new URL(request.url)
+  const includeInactive = url.searchParams.get("include_inactive") === "true"
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const createServiciosQuery = () => {
+    let query = db.from("servicios").select("*").eq("usuario_id", user.id)
+    if (!includeInactive) {
+      query = query.eq("activo", true)
+    }
+    return query.order("created_at", { ascending: false })
+  }
+
+  let servicios: any[] = []
+  let hasNext = false
+
+  if (pagination.enabled) {
+    const { data, error } = await createServiciosQuery().range(pagination.from, pagination.to + 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = Array.isArray(data) ? data : []
+    hasNext = rows.length > pagination.pageSize
+    servicios = hasNext ? rows.slice(0, pagination.pageSize) : rows
+  } else {
+    const { data, error } = await createServiciosQuery()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    servicios = Array.isArray(data) ? data : []
+  }
 
   if (!isAdmin) {
-    const serviciosSinComision = (servicios || []).map((srv: any) => ({
+    const serviciosSinComision = servicios.map((srv: any) => ({
       ...srv,
       comision_pct: null,
       comision_monto_fijo: null,
     }))
+
+    if (pagination.enabled) {
+      return NextResponse.json({
+        items: serviciosSinComision,
+        pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+      })
+    }
+
     return NextResponse.json(serviciosSinComision)
   }
 
@@ -76,10 +103,17 @@ export async function GET(request: Request) {
     .select("*")
     .eq("usuario_id", user.id)
 
-  const serviciosConComision = (servicios || []).map((srv: any) => ({
+  const serviciosConComision = servicios.map((srv: any) => ({
     ...srv,
     empleadas_comision: (comisiones || []).filter((c: any) => c.servicio_id === srv.id),
   }))
+
+  if (pagination.enabled) {
+    return NextResponse.json({
+      items: serviciosConComision,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
 
   return NextResponse.json(serviciosConComision)
 }

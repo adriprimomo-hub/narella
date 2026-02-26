@@ -2,6 +2,7 @@ import { createClient } from "@/lib/localdb/server"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const movimientoSchema = z.object({
   insumo_id: z.string().min(1),
@@ -19,16 +20,43 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const url = new URL(request.url)
   const insumoId = url.searchParams.get("insumo_id")
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
-  let query = db
-    .from("insumo_movimientos")
-    .select("*, insumos:insumo_id(nombre), empleadas:empleado_id(nombre, apellido)")
-    .eq("usuario_id", user.id)
-    .order("created_at", { ascending: false })
+  const createQuery = () => {
+    let query = db
+      .from("insumo_movimientos")
+      .select("*, insumos:insumo_id(nombre), empleadas:empleado_id(nombre, apellido)")
+      .eq("usuario_id", user.id)
+      .order("created_at", { ascending: false })
 
-  if (insumoId) query = query.eq("insumo_id", insumoId)
+    if (insumoId) query = query.eq("insumo_id", insumoId)
+    return query
+  }
 
-  const { data, error } = await query
+  if (pagination.enabled) {
+    const { data, error } = await createQuery().range(pagination.from, pagination.to + 1)
+
+    if (error) {
+      if (error.code === "42P01") {
+        return NextResponse.json({
+          items: [],
+          pagination: buildPaginationMeta(pagination.page, pagination.pageSize, false),
+        })
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const rows = Array.isArray(data) ? data : []
+    const hasNext = rows.length > pagination.pageSize
+    const items = hasNext ? rows.slice(0, pagination.pageSize) : rows
+
+    return NextResponse.json({
+      items,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
+
+  const { data, error } = await createQuery()
 
   if (error) {
     // Si la tabla aun no existe en el proyecto nuevo, devolver vacio para que la UI no falle.

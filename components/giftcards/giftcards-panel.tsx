@@ -17,6 +17,7 @@ import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factur
 import { formatDate } from "@/lib/date-format"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const GIFTCARDS_PAGE_SIZE = 60
 
 type Config = { metodos_pago_config?: { nombre: string }[]; rol?: string }
 
@@ -28,12 +29,37 @@ type GiftcardRow = GiftcardData & {
   estado?: string | null
 }
 
+type GiftcardsPageResponse = {
+  items: GiftcardRow[]
+  pagination?: {
+    page: number
+    page_size: number
+    has_prev: boolean
+    has_next: boolean
+    total?: number
+    total_pages?: number
+  }
+}
+
 export function GiftcardsPanel() {
-  const { data: giftcards = [], mutate } = useSWR<GiftcardRow[]>("/api/giftcards", fetcher)
+  const [page, setPage] = useState(1)
+  const { data: giftcardsResponse, mutate } = useSWR<GiftcardsPageResponse>(
+    `/api/giftcards?page=${page}&page_size=${GIFTCARDS_PAGE_SIZE}`,
+    fetcher,
+  )
   const { data: clientes = [] } = useSWR<Cliente[]>("/api/clientes", fetcher)
   const { data: servicios = [] } = useSWR<Servicio[]>("/api/servicios", fetcher)
   const { data: config } = useSWR<Config>("/api/config", fetcher)
   const { data: branding } = useSWR<{ data_url?: string | null }>("/api/branding/logo", fetcher)
+  const giftcards = Array.isArray(giftcardsResponse?.items) ? giftcardsResponse.items : []
+  const pagination = giftcardsResponse?.pagination || {
+    page,
+    page_size: GIFTCARDS_PAGE_SIZE,
+    has_prev: page > 1,
+    has_next: false,
+    total: giftcards.length,
+    total_pages: 1,
+  }
 
   const metodosPago = useMemo(
     () => (config?.metodos_pago_config?.length ? config.metodos_pago_config.map((m) => m.nombre).filter(Boolean) : ["efectivo", "tarjeta", "transferencia"]),
@@ -104,7 +130,10 @@ export function GiftcardsPanel() {
           <Input
             placeholder="Buscar giftcard..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
             className="pl-9"
           />
         </div>
@@ -197,6 +226,31 @@ export function GiftcardsPanel() {
               </TableBody>
             </Table>
           </div>
+          <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Página {pagination.page} de {pagination.total_pages || 1} · {pagination.total || 0} resultados
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_prev}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_next}
+                onClick={() => setPage((prev) => prev + 1)}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -222,6 +276,7 @@ export function GiftcardsPanel() {
             logoDataUrl={branding?.data_url || null}
             onSuccess={({ giftcard, imagen_base64, factura, factura_id, factura_pendiente, factura_error }) => {
               mutate()
+              setPage(1)
               setShowForm(false)
               setSelectedGiftcard(null)
               if (factura_pendiente) {

@@ -12,6 +12,7 @@ import {
 } from "@/lib/facturas-registro"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const productoMovimientoSchema = z.object({
   producto_id: z.string().min(1),
@@ -26,7 +27,7 @@ const productoMovimientoSchema = z.object({
   facturar: z.boolean().optional(),
 })
 
-export async function GET() {
+export async function GET(request: Request) {
   const db = await createClient()
   const {
     data: { user },
@@ -34,11 +35,40 @@ export async function GET() {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { data, error } = await db
-    .from("producto_movimientos")
-    .select("*, productos:producto_id(nombre), clientes:cliente_id(nombre, apellido), empleadas:empleada_id(nombre, apellido)")
-    .eq("usuario_id", user.id)
-    .order("created_at", { ascending: false })
+  const url = new URL(request.url)
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
+
+  const createQuery = () =>
+    db
+      .from("producto_movimientos")
+      .select("*, productos:producto_id(nombre), clientes:cliente_id(nombre, apellido), empleadas:empleada_id(nombre, apellido)")
+      .eq("usuario_id", user.id)
+      .order("created_at", { ascending: false })
+
+  if (pagination.enabled) {
+    const { data, error } = await createQuery().range(pagination.from, pagination.to + 1)
+
+    if (error) {
+      if (error.code === "42P01") {
+        return NextResponse.json({
+          items: [],
+          pagination: buildPaginationMeta(pagination.page, pagination.pageSize, false),
+        })
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const rows = Array.isArray(data) ? data : []
+    const hasNext = rows.length > pagination.pageSize
+    const items = hasNext ? rows.slice(0, pagination.pageSize) : rows
+
+    return NextResponse.json({
+      items,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
+
+  const { data, error } = await createQuery()
 
   if (error) {
     if (error.code === "42P01") {

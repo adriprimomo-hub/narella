@@ -36,16 +36,50 @@ type Movimiento = {
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const INSUMOS_PAGE_SIZE = 60
+const MOVIMIENTOS_PAGE_SIZE = 80
+
+type PageResponse<T> = {
+  items: T[]
+  pagination?: {
+    page: number
+    page_size: number
+    has_prev: boolean
+    has_next: boolean
+  }
+}
 
 export function InsumosPanel() {
-  const { data: insumos, mutate } = useSWR<Insumo[]>("/api/insumos", fetcher)
-  const { data: movimientos, mutate: mutateMov } = useSWR<Movimiento[]>("/api/insumos/movimientos", fetcher)
+  const [insumosPage, setInsumosPage] = useState(1)
+  const [movimientosPage, setMovimientosPage] = useState(1)
+  const { data: insumosPaginados, mutate: mutateInsumosPaginados } = useSWR<PageResponse<Insumo>>(
+    `/api/insumos?page=${insumosPage}&page_size=${INSUMOS_PAGE_SIZE}`,
+    fetcher,
+  )
+  const { data: movimientosPaginados, mutate: mutateMovimientosPaginados } = useSWR<PageResponse<Movimiento>>(
+    `/api/insumos/movimientos?page=${movimientosPage}&page_size=${MOVIMIENTOS_PAGE_SIZE}`,
+    fetcher,
+  )
+  const { data: insumos, mutate: mutateInsumos } = useSWR<Insumo[]>("/api/insumos", fetcher)
   const { data: empleadas } = useSWR<Empleada[]>("/api/empleadas", fetcher)
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
   const isAdmin = config?.rol === "admin"
 
   const insumosList = Array.isArray(insumos) ? insumos : []
-  const movimientosList = Array.isArray(movimientos) ? movimientos : []
+  const insumosTablaList = Array.isArray(insumosPaginados?.items) ? insumosPaginados.items : []
+  const insumosPagination = insumosPaginados?.pagination || {
+    page: insumosPage,
+    page_size: INSUMOS_PAGE_SIZE,
+    has_prev: insumosPage > 1,
+    has_next: false,
+  }
+  const movimientosList = Array.isArray(movimientosPaginados?.items) ? movimientosPaginados.items : []
+  const movimientosPagination = movimientosPaginados?.pagination || {
+    page: movimientosPage,
+    page_size: MOVIMIENTOS_PAGE_SIZE,
+    has_prev: movimientosPage > 1,
+    has_next: false,
+  }
   const empleadasList = Array.isArray(empleadas) ? empleadas : []
 
   const [nuevo, setNuevo] = useState({
@@ -79,7 +113,8 @@ export function InsumosPanel() {
       alert(data?.error || "No se pudo eliminar el insumo.")
       return
     }
-    mutate()
+    mutateInsumosPaginados()
+    mutateInsumos()
   }
 
   const resetInsumoForm = () => {
@@ -99,8 +134,8 @@ export function InsumosPanel() {
 
   const insumosFiltrados = useMemo(
     () =>
-      insumosList.filter((i) => i.nombre.toLowerCase().includes(searchInsumo.toLowerCase())),
-    [insumosList, searchInsumo],
+      insumosTablaList.filter((i) => i.nombre.toLowerCase().includes(searchInsumo.toLowerCase())),
+    [insumosTablaList, searchInsumo],
   )
 
   const movimientosFiltrados = useMemo(
@@ -151,7 +186,9 @@ export function InsumosPanel() {
     resetInsumoForm()
     setSelectedInsumo(null)
     setShowNuevo(false)
-    mutate()
+    setInsumosPage(1)
+    mutateInsumosPaginados()
+    mutateInsumos()
   }
 
   const registrarMovimiento = async () => {
@@ -190,8 +227,10 @@ export function InsumosPanel() {
     setSearchMovInsumo("")
     setSearchEmpleado("")
     setShowMov(false)
-    mutateMov()
-    mutate()
+    setMovimientosPage(1)
+    mutateMovimientosPaginados()
+    mutateInsumosPaginados()
+    mutateInsumos()
   }
 
   return (
@@ -218,7 +257,10 @@ export function InsumosPanel() {
             className="pl-9"
             placeholder="Buscar insumo..."
             value={searchInsumo}
-            onChange={(e) => setSearchInsumo(e.target.value)}
+            onChange={(e) => {
+              setSearchInsumo(e.target.value)
+              setInsumosPage(1)
+            }}
           />
         </div>
 
@@ -235,47 +277,78 @@ export function InsumosPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {insumosFiltrados.map((i) => {
-                  const bajoStock = (i.stock_actual || 0) <= (i.stock_minimo || 0)
-                  return (
-                    <TableRow key={i.id}>
-                      <TableCell className="font-medium">{i.nombre}</TableCell>
-                      <TableCell className={bajoStock ? "text-destructive font-semibold text-right" : "text-right"}>
-                        {i.stock_actual ?? 0}
-                      </TableCell>
-                      <TableCell className="text-right">{i.stock_minimo ?? 0}</TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setSelectedInsumo(i)
-                                setShowNuevo(true)
-                              }}
-                              className="gap-1.5"
-                            >
-                              <PencilIcon className="h-3.5 w-3.5" />
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              onClick={() => handleDeleteInsumo(i.id)}
-                              className="gap-1.5"
-                            >
-                              <Trash2Icon className="h-3.5 w-3.5" />
-                              Eliminar
-                            </Button>
-                          </div>
+                {insumosFiltrados.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 4 : 3} className="text-sm text-muted-foreground">
+                      Sin insumos para esta página.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  insumosFiltrados.map((i) => {
+                    const bajoStock = (i.stock_actual || 0) <= (i.stock_minimo || 0)
+                    return (
+                      <TableRow key={i.id}>
+                        <TableCell className="font-medium">{i.nombre}</TableCell>
+                        <TableCell className={bajoStock ? "text-destructive font-semibold text-right" : "text-right"}>
+                          {i.stock_actual ?? 0}
                         </TableCell>
-                      )}
-                    </TableRow>
-                  )
-                })}
+                        <TableCell className="text-right">{i.stock_minimo ?? 0}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setSelectedInsumo(i)
+                                  setShowNuevo(true)
+                                }}
+                                className="gap-1.5"
+                              >
+                                <PencilIcon className="h-3.5 w-3.5" />
+                                Editar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={() => handleDeleteInsumo(i.id)}
+                                className="gap-1.5"
+                              >
+                                <Trash2Icon className="h-3.5 w-3.5" />
+                                Eliminar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  })
+                )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">Página {insumosPagination.page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!insumosPagination.has_prev}
+                  onClick={() => setInsumosPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!insumosPagination.has_next}
+                  onClick={() => setInsumosPage((prev) => prev + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -354,7 +427,10 @@ export function InsumosPanel() {
             className="pl-9"
             placeholder="Buscar movimiento..."
             value={searchMov}
-            onChange={(e) => setSearchMov(e.target.value)}
+            onChange={(e) => {
+              setSearchMov(e.target.value)
+              setMovimientosPage(1)
+            }}
           />
         </div>
 
@@ -374,27 +450,58 @@ export function InsumosPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {movimientosFiltrados.map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell className="text-xs">
-                        {m.created_at ? formatDateTime(m.created_at) : "-"}
+                  {movimientosFiltrados.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                        Sin movimientos para esta página.
                       </TableCell>
-                      <TableCell>{m.insumos?.nombre || "-"}</TableCell>
-                      <TableCell className="capitalize text-xs">{m.tipo.replace("_", " ")}</TableCell>
-                      <TableCell className="text-right">{m.cantidad}</TableCell>
-                      <TableCell>
-                        {m.empleadas
-                          ? `${m.empleadas.nombre} ${m.empleadas.apellido || ""}`.trim()
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <UserBadge username={m.creado_por_username} userId={m.creado_por} />
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{m.nota || "-"}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    movimientosFiltrados.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-xs">
+                          {m.created_at ? formatDateTime(m.created_at) : "-"}
+                        </TableCell>
+                        <TableCell>{m.insumos?.nombre || "-"}</TableCell>
+                        <TableCell className="capitalize text-xs">{m.tipo.replace("_", " ")}</TableCell>
+                        <TableCell className="text-right">{m.cantidad}</TableCell>
+                        <TableCell>
+                          {m.empleadas
+                            ? `${m.empleadas.nombre} ${m.empleadas.apellido || ""}`.trim()
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <UserBadge username={m.creado_por_username} userId={m.creado_por} />
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{m.nota || "-"}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">Página {movimientosPagination.page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_prev}
+                  onClick={() => setMovimientosPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_next}
+                  onClick={() => setMovimientosPage((prev) => prev + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

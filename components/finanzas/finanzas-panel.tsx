@@ -21,8 +21,8 @@ import { formatDate, formatDateRange } from "@/lib/date-format"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const SEARCH_LIMIT = 50
-const DEFAULT_LIST_LIMIT = 5
-const PAGE_LIMIT = 20
+const DEFAULT_LIST_LIMIT = 60
+const PAGE_LIMIT = 60
 const PAGE_QUERY_LIMIT = PAGE_LIMIT
 
 const useDebouncedValue = <T,>(value: T, delay = 250) => {
@@ -125,8 +125,8 @@ export function FinanzasPanel() {
   const [searchEmpleada, setSearchEmpleada] = useState("")
   const [searchSenaList, setSearchSenaList] = useState("")
   const [searchAdelantoList, setSearchAdelantoList] = useState("")
-  const [showAllSenas, setShowAllSenas] = useState(false)
-  const [showAllAdelantos, setShowAllAdelantos] = useState(false)
+  const [showAllSenas, setShowAllSenas] = useState(true)
+  const [showAllAdelantos, setShowAllAdelantos] = useState(true)
   const [senaPage, setSenaPage] = useState(1)
   const [adelantoPage, setAdelantoPage] = useState(1)
   const [senaErrors, setSenaErrors] = useState<{ cliente?: string; servicio?: string; monto?: string }>({})
@@ -405,7 +405,7 @@ export function FinanzasPanel() {
                 if (searchSenaList) setSearchSenaList("")
               }}
             >
-              {showAllSenas ? "Ver últimos 5" : "Ver todo"}
+              {showAllSenas ? "Ver últimos 60" : "Ver todo"}
             </Button>
           </div>
 
@@ -651,7 +651,7 @@ export function FinanzasPanel() {
                 if (searchAdelantoList) setSearchAdelantoList("")
               }}
             >
-              {showAllAdelantos ? "Ver últimos 5" : "Ver todo"}
+              {showAllAdelantos ? "Ver últimos 60" : "Ver todo"}
             </Button>
           </div>
 

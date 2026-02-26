@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/localdb/server"
 import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
+import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -67,6 +68,12 @@ export async function POST(request: Request) {
   const fechaInicioDate = new Date(fecha_inicio)
   if (Number.isNaN(fechaInicioDate.getTime())) {
     return NextResponse.json({ error: "Fecha de inicio inválida" }, { status: 400 })
+  }
+  if (!isWithinPastSchedulingWindow(fechaInicioDate)) {
+    return NextResponse.json(
+      { error: `No se pueden agendar turnos con más de ${MAX_TURNO_PAST_SCHEDULE_HOURS} horas en el pasado.` },
+      { status: 409 },
+    )
   }
   if (items.length < 2) {
     return NextResponse.json({ error: "Se requieren al menos 2 servicios simultáneos" }, { status: 400 })

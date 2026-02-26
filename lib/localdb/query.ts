@@ -173,6 +173,8 @@ export class LocalQuery {
   private filters: Filter[] = []
   private orderBy: OrderBy | null = null
   private limitCount: number | null = null
+  private rangeStart: number | null = null
+  private rangeEnd: number | null = null
   private payload: any = null
   private singleMode: "single" | "maybeSingle" | null = null
   private returning = false
@@ -296,6 +298,15 @@ export class LocalQuery {
     return this
   }
 
+  range(from: number, to: number) {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return this
+    const start = Math.max(0, Math.floor(from))
+    const end = Math.max(start, Math.floor(to))
+    this.rangeStart = start
+    this.rangeEnd = end
+    return this
+  }
+
   single() {
     this.singleMode = "single"
     return this
@@ -336,8 +347,13 @@ export class LocalQuery {
   private executeSelect(rows: any[]) {
     const filtered = applyFilters(rows, this.filters)
     const ordered = applyOrder(filtered, this.orderBy)
-    const limited = this.limitCount ? ordered.slice(0, this.limitCount) : ordered
-    return this.buildReturning(limited)
+    let selected = ordered
+    if (this.rangeStart !== null && this.rangeEnd !== null) {
+      selected = ordered.slice(this.rangeStart, this.rangeEnd + 1)
+    } else if (this.limitCount) {
+      selected = ordered.slice(0, this.limitCount)
+    }
+    return this.buildReturning(selected)
   }
 
   private executeInsert(rows: any[]) {

@@ -561,22 +561,28 @@ const formatCbteNumber = (puntoVenta: number, numero: number) =>
 
 const buildLogoDataUrl = async (logoUrl: string) => {
   if (!logoUrl) return null
-  if (logoUrl.startsWith("data:image/")) return logoUrl
+  if (logoUrl.startsWith("data:image/")) {
+    if (logoUrl.toLowerCase().startsWith("data:image/svg+xml")) return null
+    return logoUrl
+  }
+
   const isHttp = logoUrl.startsWith("http://") || logoUrl.startsWith("https://")
   if (!isHttp) {
     const filePath = path.isAbsolute(logoUrl) ? logoUrl : path.join(process.cwd(), logoUrl)
     if (fs.existsSync(filePath)) {
       const ext = path.extname(filePath).toLowerCase()
-      const contentType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png"
       const buffer = fs.readFileSync(filePath)
+      if (ext === ".svg") return null
+      const contentType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png"
       return `data:${contentType};base64,${buffer.toString("base64")}`
     }
   }
   try {
     const res = await fetch(logoUrl)
     if (!res.ok) return null
-    const contentType = res.headers.get("content-type") || "image/png"
     const buffer = Buffer.from(await res.arrayBuffer())
+    const contentType = res.headers.get("content-type") || "image/png"
+    if (contentType.toLowerCase().includes("svg")) return null
     const base64 = buffer.toString("base64")
     return `data:${contentType};base64,${base64}`
   } catch (error) {
@@ -602,7 +608,7 @@ const formatDateEsAr = (value: string) => {
   return date.toLocaleDateString("es-AR")
 }
 
-const ARCA_LOGO_URL = "https://www.afip.gob.ar/frameworkAFIP/img/logo_arca_azul.svg"
+const ARCA_LOGO_URL = "https://images.weserv.nl/?url=https://www.afip.gob.ar/frameworkAFIP/img/logo_arca_azul.svg&output=png"
 const AFIP_QR_BASE_URL = "https://www.arca.gob.ar/fe/qr/"
 const QR_IMAGE_PROVIDERS = [
   "https://quickchart.io/qr?size=180&text=",
@@ -894,6 +900,7 @@ const buildFacturaPDF = async (
 ) => {
   const logoUrl = config.factura_logo_url || ""
   const logoDataUrl = logoUrl ? await buildLogoDataUrl(logoUrl) : null
+  const arcaLogoDataUrl = await buildLogoDataUrl(ARCA_LOGO_URL)
   const qrUrl = buildFiscalQrUrl(factura, config)
   const qrDataUrl = await buildQrDataUrl(qrUrl)
   const requestedName = normalizePdfFileName(filename || `Factura-${factura.punto_venta}-${factura.numero}`)
@@ -1142,10 +1149,18 @@ const buildFacturaPDF = async (
   doc.setFillColor(255, 255, 255)
   doc.setDrawColor(13, 59, 102)
   doc.roundedRect(fiscalRightX, y + 10, rightColW, 34, 8, 8, "FD")
-  doc.setTextColor(13, 59, 102)
-  doc.setFont("helvetica", "bold")
-  doc.setFontSize(12)
-  doc.text("ARCA", fiscalRightX + rightColW / 2, y + 31, { align: "center" })
+  const arcaLogoDrawn = drawContainedImage(doc, arcaLogoDataUrl, {
+    x: fiscalRightX + 8,
+    y: y + 14,
+    w: rightColW - 16,
+    h: 22,
+  })
+  if (!arcaLogoDrawn) {
+    doc.setTextColor(13, 59, 102)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(12)
+    doc.text("ARCA", fiscalRightX + rightColW / 2, y + 31, { align: "center" })
+  }
   doc.setFontSize(8)
   doc.text("Comprobante autorizado", fiscalRightX + rightColW / 2, y + 54, { align: "center" })
 

@@ -25,6 +25,7 @@ import type { Empleada } from "../empleadas/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { AlertTriangleIcon, CalendarPlusIcon, Loader2Icon, PlusIcon, SaveIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react"
+import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
 
 type Sena = {
   id: string
@@ -615,6 +616,14 @@ export function TurnoForm({
     if (Number.isNaN(startDate.getTime())) {
       setLoading(false)
       setFieldErrors((prev) => ({ ...prev, fecha_inicio: "Selecciona una fecha y hora válidas." }))
+      return
+    }
+    if (!isWithinPastSchedulingWindow(startDate)) {
+      setLoading(false)
+      setFieldErrors((prev) => ({
+        ...prev,
+        fecha_inicio: `Solo puedes agendar turnos hasta ${MAX_TURNO_PAST_SCHEDULE_HOURS} horas hacia atrás.`,
+      }))
       return
     }
 

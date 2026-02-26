@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDate } from "@/lib/date-format"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const EMPLEADAS_PAGE_SIZE = 60
 
 const diasSemana: { value: number; label: string }[] = [
   { value: 0, label: "Domingo" },
@@ -277,8 +278,22 @@ function EmpleadaForm({ empleada, onSuccess }: EmpleadaFormProps) {
   )
 }
 
+type EmpleadasPageResponse = {
+  items: Empleada[]
+  pagination?: {
+    page: number
+    page_size: number
+    has_prev: boolean
+    has_next: boolean
+  }
+}
+
 export function EmpleadasPanel() {
-  const { data: empleadas, mutate } = useSWR<Empleada[]>("/api/empleadas?include_inactive=true", fetcher)
+  const [page, setPage] = useState(1)
+  const { data: empleadasResponse, mutate } = useSWR<EmpleadasPageResponse>(
+    `/api/empleadas?include_inactive=true&page=${page}&page_size=${EMPLEADAS_PAGE_SIZE}`,
+    fetcher,
+  )
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
   const isAdmin = config?.rol === "admin"
   const [showForm, setShowForm] = useState(false)
@@ -297,6 +312,13 @@ export function EmpleadasPanel() {
     hora_desde?: string
     hora_hasta?: string
   }>({})
+  const empleadas = Array.isArray(empleadasResponse?.items) ? empleadasResponse.items : []
+  const pagination = empleadasResponse?.pagination || {
+    page,
+    page_size: EMPLEADAS_PAGE_SIZE,
+    has_prev: page > 1,
+    has_next: false,
+  }
 
   const fetchAusencias = async (empleadaId: string) => {
     setLoadingAusencias(true)
@@ -392,7 +414,7 @@ export function EmpleadasPanel() {
 
   const horariosResumidos = useMemo(() => {
     const map: Record<string, string> = {}
-    empleadas?.forEach((e) => {
+    empleadas.forEach((e) => {
       const activos = (e.horarios || [])
         .map((h) => diasSemana.find((d) => d.value === h.dia)?.label?.slice(0, 3))
         .filter(Boolean)
@@ -430,7 +452,10 @@ export function EmpleadasPanel() {
           className="pl-9"
           placeholder="Buscar empleada..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
         />
       </div>
 
@@ -448,7 +473,7 @@ export function EmpleadasPanel() {
               </TableHeader>
               <TableBody>
                 {empleadas
-                  ?.filter(
+                  .filter(
                     (e) =>
                       `${e.nombre} ${e.apellido}`.toLowerCase().includes(search.toLowerCase()),
                   )
@@ -500,8 +525,38 @@ export function EmpleadasPanel() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {empleadas.filter((e) => `${e.nombre} ${e.apellido}`.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                      Sin empleadas para esta página.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
+          </div>
+          <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">Página {pagination.page}</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_prev}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!pagination.has_next}
+                onClick={() => setPage((prev) => prev + 1)}
+              >
+                Siguiente
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -526,6 +581,7 @@ export function EmpleadasPanel() {
             empleada={selected}
             onSuccess={() => {
               mutate()
+              setPage(1)
               setSelected(null)
               setShowForm(false)
             }}

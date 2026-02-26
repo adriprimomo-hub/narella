@@ -3,6 +3,7 @@ import { createClient } from "@/lib/localdb/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { formatDateRange } from "@/lib/date-format"
+import { MEDIUM_LARGE_PAGE_SIZE } from "@/lib/api/pagination"
 
 const parseDate = (value: string | null) => {
   if (!value) return null
@@ -28,6 +29,33 @@ const addDays = (date: Date, days: number) => {
   return copy
 }
 
+const resolvePositiveInt = (rawValue: string | null, fallback: number, max = 200) => {
+  const parsed = Number.parseInt(String(rawValue || fallback), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(parsed, max)
+}
+
+const paginateArray = <T,>(items: T[], page: number, pageSize: number) => {
+  const total = items.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const currentPage = Math.min(Math.max(page, 1), totalPages)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const pagedItems = items.slice(startIndex, endIndex)
+
+  return {
+    items: pagedItems,
+    pagination: {
+      page: currentPage,
+      page_size: pageSize,
+      total,
+      total_pages: totalPages,
+      has_prev: currentPage > 1,
+      has_next: currentPage < totalPages,
+    },
+  }
+}
+
 export async function GET(request: Request) {
   const db = await createClient()
   const { data: { user } } = await db.auth.getUser()
@@ -38,6 +66,24 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const desdeParam = url.searchParams.get("desde")
   const hastaParam = url.searchParams.get("hasta")
+  const serviciosRealizadosPage = resolvePositiveInt(url.searchParams.get("sr_page"), 1)
+  const serviciosRealizadosPageSize = resolvePositiveInt(
+    url.searchParams.get("sr_page_size"),
+    MEDIUM_LARGE_PAGE_SIZE,
+    150,
+  )
+  const detalleServiciosPage = resolvePositiveInt(url.searchParams.get("ds_page"), 1)
+  const detalleServiciosPageSize = resolvePositiveInt(
+    url.searchParams.get("ds_page_size"),
+    MEDIUM_LARGE_PAGE_SIZE,
+    150,
+  )
+  const ventasProductosPage = resolvePositiveInt(url.searchParams.get("vp_page"), 1)
+  const ventasProductosPageSize = resolvePositiveInt(
+    url.searchParams.get("vp_page_size"),
+    MEDIUM_LARGE_PAGE_SIZE,
+    150,
+  )
   const today = new Date()
   const start = normalizeDayStart(parseDate(desdeParam) || today)
   const endDate = normalizeDayStart(parseDate(hastaParam) || today)
@@ -145,17 +191,37 @@ export async function GET(request: Request) {
   const ingresosServicios = Array.from(reporteServicios.values()).reduce((sum: number, s: any) => sum + s.ingresos, 0)
   const totalSenas = (senasData || []).reduce((sum: number, s: any) => sum + Number(s.monto || 0), 0)
   const totalAdelantos = (adelantosData || []).reduce((sum: number, a: any) => sum + Number(a.monto || 0), 0)
+  const serviciosOrdenados = Array.from(reporteServicios.values()).sort((a, b) => b.cantidad - a.cantidad)
+  const serviciosRealizadosOrdenados = serviciosRealizados.sort(
+    (a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime(),
+  )
+  const ventasDetalleOrdenado = Array.isArray(reporteVentas.detalle) ? reporteVentas.detalle : []
+
+  const serviciosPaginados = paginateArray(serviciosOrdenados, detalleServiciosPage, detalleServiciosPageSize)
+  const serviciosRealizadosPaginados = paginateArray(
+    serviciosRealizadosOrdenados,
+    serviciosRealizadosPage,
+    serviciosRealizadosPageSize,
+  )
+  const ventasProductosPaginados = paginateArray(ventasDetalleOrdenado, ventasProductosPage, ventasProductosPageSize)
 
   return NextResponse.json({
     desde: start.toISOString(),
     hasta: endDate.toISOString(),
     periodo: formatDateRange(start, endDate),
-    servicios: Array.from(reporteServicios.values()).sort((a, b) => b.cantidad - a.cantidad),
-    servicios_realizados: serviciosRealizados.sort(
-      (a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime(),
-    ),
-    ventas: reporteVentas,
+    servicios: serviciosPaginados.items,
+    servicios_realizados: serviciosRealizadosPaginados.items,
+    ventas: {
+      total: reporteVentas.total,
+      detalle: ventasProductosPaginados.items,
+    },
+    pagination: {
+      servicios_realizados: serviciosRealizadosPaginados.pagination,
+      detalle_servicios: serviciosPaginados.pagination,
+      ventas_productos: ventasProductosPaginados.pagination,
+    },
     resumen: {
+      cantidad_servicios: serviciosRealizadosOrdenados.length,
       ingresos_servicios: ingresosServicios,
       ingresos_productos: reporteVentas.total,
       senas_registradas: totalSenas,

@@ -27,6 +27,7 @@ type Movimiento = {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const CASH_MEDIO = "efectivo"
+const CAJA_PAGE_SIZE = 80
 
 const toLocalDateKey = (value: string | Date) => {
   const date = typeof value === "string" ? new Date(value) : value
@@ -67,6 +68,7 @@ export function CajaPanel() {
   const [mov, setMov] = useState<ManualForm>({ tipo: "ingreso", monto: "", motivo: "" })
   const [arqueo, setArqueo] = useState<ArqueoForm>({ contado: "", observaciones: "" })
   const [fecha, setFecha] = useState(() => toLocalDateKey(new Date()))
+  const [movimientosPage, setMovimientosPage] = useState(1)
   const [showMovForm, setShowMovForm] = useState(false)
   const [showArqueoForm, setShowArqueoForm] = useState(false)
 
@@ -181,6 +183,7 @@ export function CajaPanel() {
     const ok = await registrarMovimiento({ tipo: mov.tipo, monto, motivo, source_tipo: "manual" })
     if (!ok) return
     setMov({ tipo: "ingreso", monto: "", motivo: "" })
+    setMovimientosPage(1)
     setShowMovForm(false)
   }
 
@@ -196,10 +199,19 @@ export function CajaPanel() {
     const ok = await registrarMovimiento({ tipo, monto: montoArqueo, motivo, source_tipo: "arqueo" })
     if (!ok) return
     setArqueo({ contado: "", observaciones: "" })
+    setMovimientosPage(1)
     setShowArqueoForm(false)
   }
 
-  const movsTabla = movsDelDia
+  const movsTabla = useMemo(() => {
+    const start = (movimientosPage - 1) * CAJA_PAGE_SIZE
+    return movsDelDia.slice(start, start + CAJA_PAGE_SIZE)
+  }, [movimientosPage, movsDelDia])
+  const movimientosPagination = {
+    page: movimientosPage,
+    has_prev: movimientosPage > 1,
+    has_next: movimientosPage * CAJA_PAGE_SIZE < movsDelDia.length,
+  }
 
   return (
     <div className="space-y-6">
@@ -222,7 +234,15 @@ export function CajaPanel() {
           <p className="text-sm font-semibold">Resumen diario</p>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Fecha</span>
-            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-40" />
+            <Input
+              type="date"
+              value={fecha}
+              onChange={(e) => {
+                setFecha(e.target.value)
+                setMovimientosPage(1)
+              }}
+              className="w-40"
+            />
           </div>
         </div>
         <Card>
@@ -311,6 +331,29 @@ export function CajaPanel() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">Página {movimientosPagination.page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_prev}
+                  onClick={() => setMovimientosPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_next}
+                  onClick={() => setMovimientosPage((prev) => prev + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

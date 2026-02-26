@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const productoSchema = z.object({
   nombre: z.string().trim().min(1),
@@ -35,22 +36,48 @@ export async function GET(request: Request) {
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
-  const includeInactive = new URL(request.url).searchParams.get("include_inactive") === "true"
-  let query = db.from("productos").select("*").eq("usuario_id", user.id)
-  if (!includeInactive) {
-    query = query.eq("activo", true)
-  }
-  const { data: productos, error } = await query.order("nombre", { ascending: true })
+  const url = new URL(request.url)
+  const includeInactive = url.searchParams.get("include_inactive") === "true"
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const createQuery = () => {
+    let query = db.from("productos").select("*").eq("usuario_id", user.id)
+    if (!includeInactive) {
+      query = query.eq("activo", true)
+    }
+    return query.order("nombre", { ascending: true })
+  }
+
+  let productos: any[] = []
+  let hasNext = false
+
+  if (pagination.enabled) {
+    const { data, error } = await createQuery().range(pagination.from, pagination.to + 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = Array.isArray(data) ? data : []
+    hasNext = rows.length > pagination.pageSize
+    productos = hasNext ? rows.slice(0, pagination.pageSize) : rows
+  } else {
+    const { data, error } = await createQuery()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    productos = Array.isArray(data) ? data : []
+  }
 
   // Si no es admin, ocultar comisiones
   if (!isAdmin) {
-    const productosSinComision = (productos || []).map((p: any) => ({
+    const productosSinComision = productos.map((p: any) => ({
       ...p,
       comision_pct: null,
       comision_monto_fijo: null,
     }))
+
+    if (pagination.enabled) {
+      return NextResponse.json({
+        items: productosSinComision,
+        pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+      })
+    }
+
     return NextResponse.json(productosSinComision)
   }
 
@@ -60,10 +87,17 @@ export async function GET(request: Request) {
     .select("*")
     .eq("usuario_id", user.id)
 
-  const productosConComision = (productos || []).map((p: any) => ({
+  const productosConComision = productos.map((p: any) => ({
     ...p,
     empleadas_comision: (comisiones || []).filter((c: any) => c.producto_id === p.id),
   }))
+
+  if (pagination.enabled) {
+    return NextResponse.json({
+      items: productosConComision,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
 
   return NextResponse.json(productosConComision)
 }

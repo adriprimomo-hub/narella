@@ -2,6 +2,7 @@ import { createClient } from "@/lib/localdb/server"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
 
 const horarioSchema = z.object({
   dia: z.coerce.number().int().min(0).max(6),
@@ -25,13 +26,31 @@ export async function GET(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const includeInactive = new URL(request.url).searchParams.get("include_inactive") === "true"
-  let query = db.from("empleadas").select("*").eq("usuario_id", user.id)
-  if (!includeInactive) {
-    query = query.eq("activo", true)
-  }
-  const { data, error } = await query.order("created_at", { ascending: true })
+  const url = new URL(request.url)
+  const includeInactive = url.searchParams.get("include_inactive") === "true"
+  const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
+  const createQuery = () => {
+    let query = db.from("empleadas").select("*").eq("usuario_id", user.id)
+    if (!includeInactive) {
+      query = query.eq("activo", true)
+    }
+    return query.order("created_at", { ascending: true })
+  }
+
+  if (pagination.enabled) {
+    const { data, error } = await createQuery().range(pagination.from, pagination.to + 1)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = Array.isArray(data) ? data : []
+    const hasNext = rows.length > pagination.pageSize
+    const items = hasNext ? rows.slice(0, pagination.pageSize) : rows
+    return NextResponse.json({
+      items,
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, hasNext),
+    })
+  }
+
+  const { data, error } = await createQuery()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

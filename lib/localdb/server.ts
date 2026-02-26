@@ -119,6 +119,11 @@ class TenantQuery {
     return this
   }
 
+  range(from: number, to: number) {
+    this.query = this.query.range(from, to)
+    return this
+  }
+
   single() {
     this.query = this.query.single()
     return this

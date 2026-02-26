@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, isStaffRole } from "@/lib/roles"
 import { getEmpleadaIdForUser } from "@/lib/permissions"
+import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -159,6 +160,12 @@ export async function POST(request: Request) {
   }
   if (!Number.isFinite(duracion) || duracion <= 0) {
     return NextResponse.json({ error: "Duración inválida" }, { status: 400 })
+  }
+  if (!isWithinPastSchedulingWindow(fechaInicioDate)) {
+    return NextResponse.json(
+      { error: `No se pueden agendar turnos con más de ${MAX_TURNO_PAST_SCHEDULE_HOURS} horas en el pasado.` },
+      { status: 409 },
+    )
   }
   const fecha_fin = new Date(fechaInicioDate.getTime() + duracion * 60000).toISOString()
 

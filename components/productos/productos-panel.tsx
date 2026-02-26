@@ -73,6 +73,18 @@ type Movimiento = {
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const PRODUCTOS_PAGE_SIZE = 60
+const MOVIMIENTOS_PAGE_SIZE = 80
+
+type PageResponse<T> = {
+  items: T[]
+  pagination?: {
+    page: number
+    page_size: number
+    has_prev: boolean
+    has_next: boolean
+  }
+}
 
 const parseNumberInput = (value: string) => {
   if (value === "") return ""
@@ -83,8 +95,17 @@ const parseNumberInput = (value: string) => {
 const toNumber = (value: number | "") => (value === "" ? 0 : value)
 
 export function ProductosPanel() {
-  const { data: productos, mutate } = useSWR<Producto[]>("/api/productos", fetcher)
-  const { data: movimientos, mutate: mutateMov } = useSWR<Movimiento[]>("/api/productos/movimientos", fetcher)
+  const [productosPage, setProductosPage] = useState(1)
+  const [movimientosPage, setMovimientosPage] = useState(1)
+  const { data: productosPaginados, mutate: mutateProductosPaginados } = useSWR<PageResponse<Producto>>(
+    `/api/productos?page=${productosPage}&page_size=${PRODUCTOS_PAGE_SIZE}`,
+    fetcher,
+  )
+  const { data: movimientosPaginados, mutate: mutateMovimientosPaginados } = useSWR<PageResponse<Movimiento>>(
+    `/api/productos/movimientos?page=${movimientosPage}&page_size=${MOVIMIENTOS_PAGE_SIZE}`,
+    fetcher,
+  )
+  const { data: productos, mutate: mutateProductos } = useSWR<Producto[]>("/api/productos", fetcher)
   const { data: clientes } = useSWR<Cliente[]>("/api/clientes", fetcher)
   const { data: empleadas } = useSWR<Empleada[]>("/api/empleadas", fetcher)
   const { data: config } = useSWR<{ rol?: string; metodos_pago_config?: { nombre: string }[] }>("/api/config", fetcher)
@@ -133,7 +154,21 @@ export function ProductosPanel() {
   const [facturaInfo, setFacturaInfo] = useState<FacturaInfo | null>(null)
   const [facturaId, setFacturaId] = useState<string | null>(null)
   const [facturando, setFacturando] = useState(false)
-  const movimientosList = Array.isArray(movimientos) ? movimientos : []
+  const productosList = Array.isArray(productos) ? productos : []
+  const productosTablaList = Array.isArray(productosPaginados?.items) ? productosPaginados.items : []
+  const productosPagination = productosPaginados?.pagination || {
+    page: productosPage,
+    page_size: PRODUCTOS_PAGE_SIZE,
+    has_prev: productosPage > 1,
+    has_next: false,
+  }
+  const movimientosList = Array.isArray(movimientosPaginados?.items) ? movimientosPaginados.items : []
+  const movimientosPagination = movimientosPaginados?.pagination || {
+    page: movimientosPage,
+    page_size: MOVIMIENTOS_PAGE_SIZE,
+    has_prev: movimientosPage > 1,
+    has_next: false,
+  }
   const [prodErrors, setProdErrors] = useState<{ nombre?: string; precio_lista?: string; precio_descuento?: string }>({})
   const [movErrors, setMovErrors] = useState<{ producto?: string; cantidad?: string; costo?: string; precio?: string }>({})
 
@@ -146,7 +181,8 @@ export function ProductosPanel() {
       alert(data?.error || "No se pudo eliminar el producto.")
       return
     }
-    mutate()
+    mutateProductosPaginados()
+    mutateProductos()
   }
 
   const resetProductoForm = () => {
@@ -213,8 +249,8 @@ export function ProductosPanel() {
   }, [metodosPagoList, mov.metodo_pago])
 
   const productosFiltrados = useMemo(
-    () => (productos || []).filter((p) => p.nombre.toLowerCase().includes(searchProd.toLowerCase())),
-    [productos, searchProd],
+    () => productosTablaList.filter((p) => p.nombre.toLowerCase().includes(searchProd.toLowerCase())),
+    [productosTablaList, searchProd],
   )
 
   const movimientosFiltrados = useMemo(
@@ -230,16 +266,16 @@ export function ProductosPanel() {
   const productosParaMovimiento = useMemo(
     () =>
       searchMovProd
-        ? (productos || []).filter((p) => p.nombre.toLowerCase().includes(searchMovProd.toLowerCase()))
+        ? productosList.filter((p) => p.nombre.toLowerCase().includes(searchMovProd.toLowerCase()))
         : [],
-    [productos, searchMovProd],
+    [productosList, searchMovProd],
   )
 
-  const productoSeleccionado = mov.producto_id ? productos?.find((p) => p.id === mov.producto_id) : null
+  const productoSeleccionado = mov.producto_id ? productosList.find((p) => p.id === mov.producto_id) : null
   const clienteSeleccionado = mov.cliente_id ? clientes?.find((c) => c.id === mov.cliente_id) : null
 
   const sugerirPrecioVenta = (productoId: string) => {
-    const producto = (productos || []).find((p) => p.id === productoId)
+    const producto = productosList.find((p) => p.id === productoId)
     const precio = Number(producto?.precio_descuento ?? producto?.precio_lista ?? 0)
     return Number.isFinite(precio) ? precio : 0
   }
@@ -329,7 +365,9 @@ export function ProductosPanel() {
     resetProductoForm()
     setSelectedProducto(null)
     setShowNuevo(false)
-    mutate()
+    setProductosPage(1)
+    mutateProductosPaginados()
+    mutateProductos()
   }
 
   const registrarMovimiento = async () => {
@@ -390,8 +428,10 @@ export function ProductosPanel() {
       setSearchEmpleadaVenta("")
       setFacturar(false)
       setShowMov(false)
-      mutateMov()
-      mutate()
+      setMovimientosPage(1)
+      mutateMovimientosPaginados()
+      mutateProductosPaginados()
+      mutateProductos()
     } finally {
       setFacturando(false)
     }
@@ -446,7 +486,10 @@ export function ProductosPanel() {
             className="pl-9"
             placeholder="Buscar producto..."
             value={searchProd}
-            onChange={(e) => setSearchProd(e.target.value)}
+            onChange={(e) => {
+              setSearchProd(e.target.value)
+              setProductosPage(1)
+            }}
           />
         </div>
 
@@ -465,46 +508,77 @@ export function ProductosPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {productosFiltrados.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.nombre}</TableCell>
-                      <TableCell className="text-right">${Number(p.precio_lista || 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        {p.precio_descuento == null ? "-" : `$${Number(p.precio_descuento).toFixed(2)}`}
+                  {productosFiltrados.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={isAdmin ? 6 : 5} className="text-sm text-muted-foreground">
+                        Sin productos para esta página.
                       </TableCell>
-                      <TableCell className="text-right">{p.stock_actual ?? 0}</TableCell>
-                      <TableCell className="text-right">{p.stock_minimo ?? 0}</TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setSelectedProducto(p)
-                                setShowNuevo(true)
-                              }}
-                              className="gap-1.5"
-                            >
-                              <PencilIcon className="h-3.5 w-3.5" />
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              onClick={() => handleDeleteProducto(p.id)}
-                              className="gap-1.5"
-                            >
-                              <Trash2Icon className="h-3.5 w-3.5" />
-                              Eliminar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
                     </TableRow>
-                  ))}
+                  ) : (
+                    productosFiltrados.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">{p.nombre}</TableCell>
+                        <TableCell className="text-right">${Number(p.precio_lista || 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          {p.precio_descuento == null ? "-" : `$${Number(p.precio_descuento).toFixed(2)}`}
+                        </TableCell>
+                        <TableCell className="text-right">{p.stock_actual ?? 0}</TableCell>
+                        <TableCell className="text-right">{p.stock_minimo ?? 0}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setSelectedProducto(p)
+                                  setShowNuevo(true)
+                                }}
+                                className="gap-1.5"
+                              >
+                                <PencilIcon className="h-3.5 w-3.5" />
+                                Editar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={() => handleDeleteProducto(p.id)}
+                                className="gap-1.5"
+                              >
+                                <Trash2Icon className="h-3.5 w-3.5" />
+                                Eliminar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">Página {productosPagination.page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!productosPagination.has_prev}
+                  onClick={() => setProductosPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!productosPagination.has_next}
+                  onClick={() => setProductosPage((prev) => prev + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -713,7 +787,10 @@ export function ProductosPanel() {
             className="pl-9"
             placeholder="Buscar movimiento..."
             value={searchMovList}
-            onChange={(e) => setSearchMovList(e.target.value)}
+            onChange={(e) => {
+              setSearchMovList(e.target.value)
+              setMovimientosPage(1)
+            }}
           />
         </div>
 
@@ -735,39 +812,70 @@ export function ProductosPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {movimientosFiltrados.map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell className="text-xs">
-                        {formatDateTime(m.created_at)}
-                      </TableCell>
-                      <TableCell>{m.productos?.nombre || "-"}</TableCell>
-                      <TableCell className="capitalize text-xs">{m.tipo.replace("_", " ")}</TableCell>
-                      <TableCell className="text-right">{m.cantidad}</TableCell>
-                      <TableCell>{m.clientes ? `${m.clientes.nombre} ${m.clientes.apellido}` : "-"}</TableCell>
-                      <TableCell className="capitalize">{m.metodo_pago || "-"}</TableCell>
-                      <TableCell className="text-right">
-                        {m.tipo === "compra"
-                          ? `$${(m.costo_unitario || 0).toFixed(2)}`
-                          : `$${(m.precio_unitario || 0).toFixed(2)}`}
-                      </TableCell>
-                      <TableCell>
-                        {m.tipo === "venta" ? (
-                          m.empleadas ? (
-                            `${m.empleadas.nombre} ${m.empleadas.apellido || ""}`.trim()
-                          ) : (
-                            <UserBadge username={m.creado_por_username} userId={m.creado_por} />
-                          )
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <UserBadge username={m.creado_por_username} userId={m.creado_por} />
+                  {movimientosFiltrados.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-sm text-muted-foreground">
+                        Sin movimientos para esta página.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    movimientosFiltrados.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-xs">
+                          {formatDateTime(m.created_at)}
+                        </TableCell>
+                        <TableCell>{m.productos?.nombre || "-"}</TableCell>
+                        <TableCell className="capitalize text-xs">{m.tipo.replace("_", " ")}</TableCell>
+                        <TableCell className="text-right">{m.cantidad}</TableCell>
+                        <TableCell>{m.clientes ? `${m.clientes.nombre} ${m.clientes.apellido}` : "-"}</TableCell>
+                        <TableCell className="capitalize">{m.metodo_pago || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          {m.tipo === "compra"
+                            ? `$${(m.costo_unitario || 0).toFixed(2)}`
+                            : `$${(m.precio_unitario || 0).toFixed(2)}`}
+                        </TableCell>
+                        <TableCell>
+                          {m.tipo === "venta" ? (
+                            m.empleadas ? (
+                              `${m.empleadas.nombre} ${m.empleadas.apellido || ""}`.trim()
+                            ) : (
+                              <UserBadge username={m.creado_por_username} userId={m.creado_por} />
+                            )
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <UserBadge username={m.creado_por_username} userId={m.creado_por} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="flex flex-col gap-2 px-6 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">Página {movimientosPagination.page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_prev}
+                  onClick={() => setMovimientosPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!movimientosPagination.has_next}
+                  onClick={() => setMovimientosPage((prev) => prev + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
