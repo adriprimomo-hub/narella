@@ -15,6 +15,7 @@ import type { Cliente } from "../clientes/clientes-list"
 import { formatDateTime } from "@/lib/date-format"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { FacturandoDialog } from "@/components/facturacion/facturando-dialog"
+import { normalizeRole } from "@/lib/roles"
 
 type ComisionTipo = "porcentaje" | "monto"
 
@@ -109,7 +110,10 @@ export function ProductosPanel() {
   const { data: clientes } = useSWR<Cliente[]>("/api/clientes", fetcher)
   const { data: empleadas } = useSWR<Empleada[]>("/api/empleadas", fetcher)
   const { data: config } = useSWR<{ rol?: string; metodos_pago_config?: { nombre: string }[] }>("/api/config", fetcher)
-  const isAdmin = config?.rol === "admin"
+  const role = normalizeRole(config?.rol)
+  const isAdmin = role === "admin"
+  const isRecepcion = role === "recepcion"
+  const canCreateProducto = isAdmin || isRecepcion
   const metodosPagoList = useMemo(() => {
     if (Array.isArray(config?.metodos_pago_config) && config.metodos_pago_config.length > 0) {
       return config.metodos_pago_config.map((m) => m.nombre).filter(Boolean)
@@ -323,6 +327,8 @@ export function ProductosPanel() {
   const empleadasSeleccionadas = (empleadas || []).filter((e) => empleadasHabilitadas.includes(e.id))
 
   const guardarProducto = async () => {
+    if (selectedProducto && !isAdmin) return
+
     const nextErrors: { nombre?: string; precio_lista?: string; precio_descuento?: string } = {}
     if (!prod.nombre.trim()) nextErrors.nombre = "Ingresa el nombre del producto."
     if (prod.precio_lista === "" || Number(prod.precio_lista) <= 0) {
@@ -337,16 +343,20 @@ export function ProductosPanel() {
     }
     setProdErrors({})
     const comisionBase =
-      comisionTipoBase === "porcentaje"
-        ? { comision_pct: toNumber(prod.comision_pct), comision_monto_fijo: null }
-        : { comision_pct: null, comision_monto_fijo: toNumber(prod.comision_monto_fijo) }
-    const comisionesPayload = empleadasComision
-      .filter((c) => c.empleada_id)
-      .map((c) => ({
-        empleada_id: c.empleada_id,
-        comision_pct: c.comision_tipo === "porcentaje" ? toNumber(c.comision_pct) : null,
-        comision_monto_fijo: c.comision_tipo === "monto" ? toNumber(c.comision_monto_fijo) : null,
-      }))
+      isAdmin
+        ? comisionTipoBase === "porcentaje"
+          ? { comision_pct: toNumber(prod.comision_pct), comision_monto_fijo: null }
+          : { comision_pct: null, comision_monto_fijo: toNumber(prod.comision_monto_fijo) }
+        : { comision_pct: null, comision_monto_fijo: null }
+    const comisionesPayload = isAdmin
+      ? empleadasComision
+          .filter((c) => c.empleada_id)
+          .map((c) => ({
+            empleada_id: c.empleada_id,
+            comision_pct: c.comision_tipo === "porcentaje" ? toNumber(c.comision_pct) : null,
+            comision_monto_fijo: c.comision_tipo === "monto" ? toNumber(c.comision_monto_fijo) : null,
+          }))
+      : []
     const isEditing = Boolean(selectedProducto)
     const res = await fetch(isEditing ? `/api/productos/${selectedProducto?.id}` : "/api/productos", {
       method: isEditing ? "PUT" : "POST",
@@ -463,7 +473,7 @@ export function ProductosPanel() {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        {isAdmin && (
+        {canCreateProducto && (
           <div className="flex justify-between items-center">
             <Button
               className="gap-2"
@@ -585,7 +595,7 @@ export function ProductosPanel() {
       </div>
 
       <Dialog
-        open={showNuevo && isAdmin}
+        open={showNuevo && (isAdmin || (isRecepcion && !selectedProducto))}
         onOpenChange={(open) => {
           if (!open) {
             setShowNuevo(false)
@@ -662,108 +672,110 @@ export function ProductosPanel() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-lg border bg-card p-3">
-              <p className="text-sm font-medium">Comisión base</p>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_1fr]">
-                <Select value={comisionTipoBase} onValueChange={(v) => setComisionTipoBase(v as ComisionTipo)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="porcentaje">Porcentaje</SelectItem>
-                    <SelectItem value="monto">Monto fijo</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={comisionTipoBase === "porcentaje" ? prod.comision_pct : prod.comision_monto_fijo}
-                  onChange={(e) => {
-                    const value = parseNumberInput(e.target.value)
-                    if (comisionTipoBase === "porcentaje") {
-                      setProd({ ...prod, comision_pct: value })
-                    } else {
-                      setProd({ ...prod, comision_monto_fijo: value })
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Comisiones por empleada (opcional)</p>
-                  <div className="relative w-48">
-                    <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      className="pl-9"
-                      placeholder="Buscar empleada..."
-                      value={searchEmpleadaComision}
-                      onChange={(e) => setSearchEmpleadaComision(e.target.value)}
-                    />
-                  </div>
+            {isAdmin && (
+              <div className="space-y-3 rounded-lg border bg-card p-3">
+                <p className="text-sm font-medium">Comisión base</p>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_1fr]">
+                  <Select value={comisionTipoBase} onValueChange={(v) => setComisionTipoBase(v as ComisionTipo)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="porcentaje">Porcentaje</SelectItem>
+                      <SelectItem value="monto">Monto fijo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={comisionTipoBase === "porcentaje" ? prod.comision_pct : prod.comision_monto_fijo}
+                    onChange={(e) => {
+                      const value = parseNumberInput(e.target.value)
+                      if (comisionTipoBase === "porcentaje") {
+                        setProd({ ...prod, comision_pct: value })
+                      } else {
+                        setProd({ ...prod, comision_monto_fijo: value })
+                      }
+                    }}
+                  />
                 </div>
 
-                {searchEmpleadaComision && (
-                  <div className="space-y-1 rounded-md border bg-muted/40 p-2">
-                    {empleadasFiltradasComision.length ? (
-                      empleadasFiltradasComision.map((e) => (
-                        <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                          <span>{e.nombre}</span>
-                          <Button
-                            type="button"
-                            variant={empleadasHabilitadas.includes(e.id) ? "secondary" : "default"}
-                            size="sm"
-                            onClick={() => toggleEmpleadaComision(e.id)}
-                          >
-                            {empleadasHabilitadas.includes(e.id) ? "Quitar" : "Agregar"}
-                          </Button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Sin resultados.</p>
-                    )}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Comisiones por empleada (opcional)</p>
+                    <div className="relative w-48">
+                      <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-9"
+                        placeholder="Buscar empleada..."
+                        value={searchEmpleadaComision}
+                        onChange={(e) => setSearchEmpleadaComision(e.target.value)}
+                      />
+                    </div>
                   </div>
-                )}
 
-                {empleadasSeleccionadas.length > 0 && (
-                  <div className="space-y-2">
-                    {empleadasSeleccionadas.map((e) => {
-                      const commission = empleadasComision.find((c) => c.empleada_id === e.id) || buildComisionEntry(e.id)
-                      const currentTipo = commission.comision_tipo
-                      const currentValue = currentTipo === "porcentaje" ? commission.comision_pct : commission.comision_monto_fijo
-                      return (
-                        <div key={e.id} className="rounded-lg border p-2 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium">{e.nombre}</p>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => toggleEmpleadaComision(e.id)}>
-                              Quitar
+                  {searchEmpleadaComision && (
+                    <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+                      {empleadasFiltradasComision.length ? (
+                        empleadasFiltradasComision.map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
+                            <span>{e.nombre}</span>
+                            <Button
+                              type="button"
+                              variant={empleadasHabilitadas.includes(e.id) ? "secondary" : "default"}
+                              size="sm"
+                              onClick={() => toggleEmpleadaComision(e.id)}
+                            >
+                              {empleadasHabilitadas.includes(e.id) ? "Quitar" : "Agregar"}
                             </Button>
                           </div>
-                          <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-[140px_1fr]">
-                            <Select value={currentTipo} onValueChange={(v) => updateComisionTipo(e.id, v as ComisionTipo)}>
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="porcentaje">Porcentaje</SelectItem>
-                                <SelectItem value="monto">Monto fijo</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              className="h-8"
-                              value={currentValue}
-                              onChange={(ev) => updateComisionValor(e.id, parseNumberInput(ev.target.value))}
-                            />
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Sin resultados.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {empleadasSeleccionadas.length > 0 && (
+                    <div className="space-y-2">
+                      {empleadasSeleccionadas.map((e) => {
+                        const commission = empleadasComision.find((c) => c.empleada_id === e.id) || buildComisionEntry(e.id)
+                        const currentTipo = commission.comision_tipo
+                        const currentValue = currentTipo === "porcentaje" ? commission.comision_pct : commission.comision_monto_fijo
+                        return (
+                          <div key={e.id} className="rounded-lg border p-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">{e.nombre}</p>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => toggleEmpleadaComision(e.id)}>
+                                Quitar
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-[140px_1fr]">
+                              <Select value={currentTipo} onValueChange={(v) => updateComisionTipo(e.id, v as ComisionTipo)}>
+                                <SelectTrigger className="h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="porcentaje">Porcentaje</SelectItem>
+                                  <SelectItem value="monto">Monto fijo</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="h-8"
+                                value={currentValue}
+                                onChange={(ev) => updateComisionValor(e.id, parseNumberInput(ev.target.value))}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <Button className="w-full gap-2" variant="primary" onClick={guardarProducto}>
               <PlusIcon className="h-4 w-4" />

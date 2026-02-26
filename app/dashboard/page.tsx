@@ -29,6 +29,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { ChevronDownIcon } from "lucide-react"
 import { normalizeRole } from "@/lib/roles"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type FetchError = Error & { status?: number }
 
@@ -130,7 +131,6 @@ function DashboardContent() {
   const availableTabs = useMemo(() => tabsConfig.filter((item) => allowedTabs.has(item.key)), [tabsConfig, allowedTabs])
   const primaryTabs = useMemo(() => availableTabs.filter((item) => primaryTabKeys.has(item.key)), [availableTabs, primaryTabKeys])
   const secondaryTabs = useMemo(() => availableTabs.filter((item) => !primaryTabKeys.has(item.key)), [availableTabs, primaryTabKeys])
-  const moreActive = secondaryTabs.some((item) => item.key === tab)
 
   useEffect(() => {
     const current = searchParams.get("tab") || ""
@@ -181,103 +181,121 @@ function DashboardContent() {
       <div className="mx-auto max-w-[var(--container-max)]">
 
         <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="flex w-full flex-wrap items-center justify-start gap-2 h-auto">
-            {primaryTabs.map((item) => (
-              <TabsTrigger key={item.key} value={item.key} className="sm:flex-none">
-                {item.label}
-              </TabsTrigger>
-            ))}
+          {isMobile ? (
+            <div className="w-full max-w-sm">
+              <p className="mb-1 text-xs text-muted-foreground">Sección</p>
+              <Select value={tab} onValueChange={handleTabChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona una sección" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTabs.map((item) => (
+                    <SelectItem key={item.key} value={item.key}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <TabsList className="flex w-full flex-wrap items-center justify-start gap-2 h-auto">
+              {primaryTabs.map((item) => (
+                <TabsTrigger key={item.key} value={item.key} className="sm:flex-none">
+                  {item.label}
+                </TabsTrigger>
+              ))}
 
-            {/* Administración */}
-            {secondaryTabs.some((t) => t.category === "administracion") && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={secondaryTabs.some((t) => t.category === "administracion" && t.key === tab) ? "secondary" : "outline"}
-                    className="gap-1.5"
-                  >
-                    Administración
-                    <ChevronDownIcon className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {secondaryTabs
-                    .filter((t) => t.category === "administracion")
-                    .map((item) => (
-                      <DropdownMenuItem
-                        key={item.key}
-                        onSelect={() => handleTabChange(item.key)}
-                        className={item.key === tab ? "font-medium" : undefined}
-                      >
-                        {item.label}
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+              {/* Administración */}
+              {secondaryTabs.some((t) => t.category === "administracion") && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={secondaryTabs.some((t) => t.category === "administracion" && t.key === tab) ? "secondary" : "outline"}
+                      className="gap-1.5"
+                    >
+                      Administración
+                      <ChevronDownIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {secondaryTabs
+                      .filter((t) => t.category === "administracion")
+                      .map((item) => (
+                        <DropdownMenuItem
+                          key={item.key}
+                          onSelect={() => handleTabChange(item.key)}
+                          className={item.key === tab ? "font-medium" : undefined}
+                        >
+                          {item.label}
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
-            {/* Gestión */}
-            {secondaryTabs.some((t) => t.category === "gestion") && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={secondaryTabs.some((t) => t.category === "gestion" && t.key === tab) ? "secondary" : "outline"}
-                    className="gap-1.5"
-                  >
-                    Gestión
-                    <ChevronDownIcon className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {secondaryTabs
-                    .filter((t) => t.category === "gestion")
-                    .map((item) => (
-                      <DropdownMenuItem
-                        key={item.key}
-                        onSelect={() => handleTabChange(item.key)}
-                        className={item.key === tab ? "font-medium" : undefined}
-                      >
-                        {item.label}
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+              {/* Gestión */}
+              {secondaryTabs.some((t) => t.category === "gestion") && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={secondaryTabs.some((t) => t.category === "gestion" && t.key === tab) ? "secondary" : "outline"}
+                      className="gap-1.5"
+                    >
+                      Gestión
+                      <ChevronDownIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {secondaryTabs
+                      .filter((t) => t.category === "gestion")
+                      .map((item) => (
+                        <DropdownMenuItem
+                          key={item.key}
+                          onSelect={() => handleTabChange(item.key)}
+                          className={item.key === tab ? "font-medium" : undefined}
+                        >
+                          {item.label}
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
-            {/* Inventario */}
-            {secondaryTabs.some((t) => t.category === "inventario") && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={secondaryTabs.some((t) => t.category === "inventario" && t.key === tab) ? "secondary" : "outline"}
-                    className="gap-1.5"
-                  >
-                    Inventario
-                    <ChevronDownIcon className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {secondaryTabs
-                    .filter((t) => t.category === "inventario")
-                    .map((item) => (
-                      <DropdownMenuItem
-                        key={item.key}
-                        onSelect={() => handleTabChange(item.key)}
-                        className={item.key === tab ? "font-medium" : undefined}
-                      >
-                        {item.label}
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </TabsList>
+              {/* Inventario */}
+              {secondaryTabs.some((t) => t.category === "inventario") && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={secondaryTabs.some((t) => t.category === "inventario" && t.key === tab) ? "secondary" : "outline"}
+                      className="gap-1.5"
+                    >
+                      Inventario
+                      <ChevronDownIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40">
+                    {secondaryTabs
+                      .filter((t) => t.category === "inventario")
+                      .map((item) => (
+                        <DropdownMenuItem
+                          key={item.key}
+                          onSelect={() => handleTabChange(item.key)}
+                          className={item.key === tab ? "font-medium" : undefined}
+                        >
+                          {item.label}
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </TabsList>
+          )}
 
           {allowedTabs.has("turnos") && (
             <TabsContent value="turnos" className="mt-6">

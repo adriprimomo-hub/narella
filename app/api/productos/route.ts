@@ -111,7 +111,8 @@ export async function POST(request: Request) {
   const username = user.username || (user.user_metadata as any)?.username || user.id
 
   const role = await getUserRole(db, user.id)
-  if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const canCreateProducto = isAdminRole(role) || role === "recepcion"
+  if (!canCreateProducto) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { data: payload, response: validationResponse } = await validateBody(request, productoSchema)
   if (validationResponse) return validationResponse

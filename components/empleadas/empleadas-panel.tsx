@@ -77,9 +77,10 @@ function buildInitialState(empleada?: Empleada | null): FormState {
 interface EmpleadaFormProps {
   empleada?: Empleada | null
   onSuccess: () => void
+  onCancel?: () => void
 }
 
-function EmpleadaForm({ empleada, onSuccess }: EmpleadaFormProps) {
+function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
   const formId = useId()
   const nombreId = `${formId}-nombre`
   const apellidoId = `${formId}-apellido`
@@ -270,9 +271,14 @@ function EmpleadaForm({ empleada, onSuccess }: EmpleadaFormProps) {
         </label>
       </div>
 
-      <Button type="submit" className="w-full gap-2" disabled={loading}>
-        {loading ? "Guardando..." : empleada ? "Actualizar" : "Crear empleada"}
-      </Button>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" className="gap-2" disabled={loading}>
+          {loading ? "Guardando..." : empleada ? "Actualizar" : "Crear empleada"}
+        </Button>
+      </div>
       {formError && <p className="text-sm text-destructive">{formError}</p>}
     </form>
   )
@@ -579,6 +585,10 @@ export function EmpleadasPanel() {
           </DialogHeader>
           <EmpleadaForm
             empleada={selected}
+            onCancel={() => {
+              setSelected(null)
+              setShowForm(false)
+            }}
             onSuccess={() => {
               mutate()
               setPage(1)
@@ -779,6 +789,21 @@ export function EmpleadasPanel() {
                   </TableBody>
                 </Table>
               )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowAusenciasDialog(false)
+                  setSelectedEmpleadaAusencias(null)
+                  setAusencias([])
+                  setAusenciaError(null)
+                }}
+              >
+                Cerrar
+              </Button>
             </div>
           </div>
         </DialogContent>
