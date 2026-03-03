@@ -193,20 +193,20 @@ const fillGiftcardTemplatePdf = async (templatePdfDataUrl: string, data: Giftcar
     page,
     font: fontBold,
     text: valePor,
-    x: 182,
-    y: yFromTop(201),
+    x: 186,
+    y: yFromTop(207),
     maxWidth: 130,
-    baseSize: 12.5,
+    baseSize: 11.8,
     color: textColor,
   })
   drawFittedText({
     page,
     font: fontRegular,
     text: validoHasta,
-    x: 281,
-    y: yFromTop(273),
+    x: 279,
+    y: yFromTop(266),
     maxWidth: 70,
-    baseSize: 10,
+    baseSize: 10.2,
     color: textColor,
   })
 
