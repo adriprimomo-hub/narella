@@ -1,11 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/date-format"
 import { VerTurnoFotoButton } from "@/components/turnos/ver-turno-foto-button"
+import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -19,6 +22,7 @@ interface ClienteReporte {
   }
   historial: any[]
   productos?: ProductoVenta[]
+  facturas?: FacturaCliente[]
 }
 
 interface HistorialClienteProps {
@@ -35,14 +39,50 @@ type ProductoVenta = {
   productos?: { nombre: string } | null
 }
 
+type FacturaCliente = {
+  id: string
+  tipo?: "factura" | "nota_credito"
+  estado?: string | null
+  numero?: number | null
+  punto_venta?: number | null
+  cae?: string | null
+  cae_vto?: string | null
+  fecha?: string | null
+  created_at?: string | null
+  total?: number | null
+}
+
+const formatComprobante = (row: FacturaCliente) => {
+  if (row.punto_venta != null && row.numero != null) {
+    const pv = String(Number(row.punto_venta) || 0).padStart(5, "0")
+    const nro = String(Number(row.numero) || 0).padStart(8, "0")
+    return `${pv}-${nro}`
+  }
+  if (row.estado === "pendiente") return "(pendiente)"
+  return "-"
+}
+
+const formatEstado = (estado?: string | null) => {
+  if (!estado) return "Emitida"
+  if (estado === "emitida") return "Emitida"
+  if (estado === "pendiente") return "Pendiente"
+  if (estado === "con_nota_credito") return "Con nota crédito"
+  if (estado === "anulada") return "Anulada"
+  return estado
+}
+
 export function HistorialCliente({ clienteId }: HistorialClienteProps) {
   const { data: reporte } = useSWR<ClienteReporte>(`/api/reportes/clientes/${clienteId}`, fetcher)
+  const [facturaOpen, setFacturaOpen] = useState(false)
+  const [facturaInfo, setFacturaInfo] = useState<FacturaInfo | null>(null)
+  const [facturaId, setFacturaId] = useState<string | null>(null)
 
   if (!reporte) return <div className="text-center py-8">Cargando...</div>
 
   const cliente = reporte.cliente
   const stats = reporte.estadisticas
   const productosVendidos = Array.isArray(reporte.productos) ? reporte.productos : []
+  const facturasEmitidas = Array.isArray(reporte.facturas) ? reporte.facturas : []
 
   return (
     <div className="space-y-6">
@@ -175,6 +215,63 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
 
       <Card>
         <CardHeader>
+          <CardTitle>Facturas emitidas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {facturasEmitidas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin facturas emitidas.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Comprobante</TableHead>
+                  <TableHead>CAE</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {facturasEmitidas.map((factura) => (
+                  <TableRow key={factura.id}>
+                    <TableCell className="text-xs">
+                      {factura.fecha || factura.created_at ? formatDateTime(factura.fecha || factura.created_at || "") : "-"}
+                    </TableCell>
+                    <TableCell className="text-xs font-medium">{formatComprobante(factura)}</TableCell>
+                    <TableCell className="text-xs">{factura.cae || "-"}</TableCell>
+                    <TableCell className="text-right">${Number(factura.total || 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-xs">{formatEstado(factura.estado)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setFacturaInfo({
+                            numero: factura.numero ?? undefined,
+                            punto_venta: factura.punto_venta ?? undefined,
+                            cae: factura.cae ?? undefined,
+                            cae_vto: factura.cae_vto ?? undefined,
+                            total: factura.total ?? undefined,
+                          })
+                          setFacturaId(factura.id)
+                          setFacturaOpen(true)
+                        }}
+                      >
+                        Ver
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Productos vendidos</CardTitle>
         </CardHeader>
         <CardContent>
@@ -217,6 +314,16 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
           )}
         </CardContent>
       </Card>
+
+      <FacturaDialog
+        open={facturaOpen}
+        onOpenChange={(open) => {
+          setFacturaOpen(open)
+          if (!open) setFacturaId(null)
+        }}
+        facturaId={facturaId}
+        factura={facturaInfo}
+      />
     </div>
   )
 }

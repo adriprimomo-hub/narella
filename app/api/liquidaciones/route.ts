@@ -67,6 +67,19 @@ type LiquidacionItem = {
   adelanto?: number | null
 }
 
+type LiquidacionDetalle = {
+  desde: string
+  hasta: string
+  empleada: { id: string; nombre: string; apellido?: string | null }
+  items: LiquidacionItem[]
+  totales: { comision: number; adelantos: number; neto: number }
+}
+
+const isMissingTableError = (error: any) => {
+  const code = String(error?.code || "")
+  return code === "42P01" || code === "PGRST205"
+}
+
 const parseDate = (value: string | null) => {
   if (!value) return null
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
@@ -524,5 +537,83 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[liquidaciones] unexpected error", error)
     return NextResponse.json({ error: "No se pudo calcular la liquidacion" }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const db = await createClient()
+    const {
+      data: { user },
+    } = await db.auth.getUser()
+
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const role = await getUserRole(db, user.id)
+    if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    const payload = await request.json().catch(() => null)
+    const empleadaId = String(payload?.empleada_id || "").trim()
+    const desde = String(payload?.desde || "").trim()
+    const hasta = String(payload?.hasta || "").trim()
+
+    if (!empleadaId) {
+      return NextResponse.json({ error: "Selecciona una empleada" }, { status: 400 })
+    }
+
+    const calcUrl = new URL(request.url)
+    calcUrl.searchParams.set("empleada_id", empleadaId)
+    if (desde) calcUrl.searchParams.set("desde", desde)
+    if (hasta) calcUrl.searchParams.set("hasta", hasta)
+
+    const calcResponse = await GET(
+      new Request(calcUrl.toString(), {
+        method: "GET",
+        headers: request.headers,
+      }),
+    )
+    if (!calcResponse.ok) {
+      return calcResponse
+    }
+
+    const liquidacion = (await calcResponse.json().catch(() => null)) as LiquidacionDetalle | null
+    if (!liquidacion?.empleada?.id) {
+      return NextResponse.json({ error: "No se pudo generar la liquidación" }, { status: 500 })
+    }
+
+    const insertPayload = {
+      usuario_id: user.id,
+      empleada_id: liquidacion.empleada.id,
+      empleada_nombre: liquidacion.empleada.nombre || "Sin asignar",
+      empleada_apellido: liquidacion.empleada.apellido || null,
+      desde: liquidacion.desde,
+      hasta: liquidacion.hasta,
+      items: Array.isArray(liquidacion.items) ? liquidacion.items : [],
+      total_comision: Number(liquidacion.totales?.comision || 0),
+      total_adelantos: Number(liquidacion.totales?.adelantos || 0),
+      total_neto: Number(liquidacion.totales?.neto || 0),
+      created_by: user.id,
+    }
+
+    const { data: saved, error: saveError } = await db
+      .from("liquidaciones_historial")
+      .insert([insertPayload])
+      .select("id, created_at")
+      .single()
+
+    if (saveError) {
+      if (isMissingTableError(saveError)) {
+        return NextResponse.json({ error: "Falta crear la tabla de historial de liquidaciones." }, { status: 500 })
+      }
+      return NextResponse.json({ error: saveError.message || "No se pudo guardar la liquidación." }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      ...liquidacion,
+      historial_id: saved?.id || null,
+      created_at: saved?.created_at || new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("[liquidaciones] unexpected POST error", error)
+    return NextResponse.json({ error: "No se pudo guardar la liquidación" }, { status: 500 })
   }
 }

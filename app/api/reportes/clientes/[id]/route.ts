@@ -3,6 +3,24 @@ import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 
+const isFacturasTableMissingError = (error: any) => {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  if (code === "42P01" || code === "PGRST205") return true
+  return message.includes("public.facturas") && message.includes("schema cache")
+}
+
+const isMissingColumnError = (error: any, column: string) => {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  const col = String(column || "").toLowerCase()
+  if (!col) return false
+  if (code === "42703" || code === "PGRST204") {
+    return message.includes(col)
+  }
+  return message.includes("schema cache") && message.includes(col)
+}
+
 const stripTurnoPhoto = (turno: any) => {
   const fotoTrabajoDisponible = Boolean(turno?.foto_trabajo_storage_path || turno?.foto_trabajo_base64)
   const {
@@ -107,6 +125,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (ventasMovError) return NextResponse.json({ error: ventasMovError.message }, { status: 500 })
   const ventasProductosList = ventasMov ?? []
 
+  const buildFacturasQuery = () =>
+    db
+      .from("facturas")
+      .select("id, tipo, estado, numero, punto_venta, cae, cae_vto, fecha, total, created_at, cliente_id")
+      .eq("usuario_id", user.id)
+      .eq("cliente_id", id)
+
+  let { data: facturas, error: facturasError } = await buildFacturasQuery().order("fecha", { ascending: false })
+  if (facturasError && isMissingColumnError(facturasError, "fecha")) {
+    ;({ data: facturas, error: facturasError } = await buildFacturasQuery().order("created_at", { ascending: false }))
+  }
+  if (facturasError && isMissingColumnError(facturasError, "created_at")) {
+    ;({ data: facturas, error: facturasError } = await buildFacturasQuery())
+  }
+  if (facturasError && !isFacturasTableMissingError(facturasError)) {
+    return NextResponse.json({ error: facturasError.message }, { status: 500 })
+  }
+
+  const facturasEmitidas = (Array.isArray(facturas) ? facturas : []).filter((row: any) => row?.tipo !== "nota_credito")
+
   const totalPagos = pagos?.reduce((sum: number, p: any) => sum + Number(p.monto || 0), 0) || 0
   const totalPagosGrupo = pagosGrupoItems?.reduce((sum: number, p: any) => sum + Number(p.monto || 0), 0) || 0
   const totalProductos = ventasProductosList.reduce(
@@ -130,5 +168,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     },
     historial: historialEnriquecido,
     productos: ventasProductosList,
+    facturas: facturasEmitidas,
   })
 }

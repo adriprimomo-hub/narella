@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { CalendarIcon, ExternalLinkIcon, PlusIcon, PrinterIcon, SearchIcon, Share2Icon } from "lucide-react"
+import { CalendarIcon, ExternalLinkIcon, PlusIcon, SearchIcon, Share2Icon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createShareLink } from "@/lib/share-links-client"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
@@ -78,6 +78,20 @@ type LiquidacionDetalle = {
   empleada: { id: string; nombre: string; apellido?: string | null }
   items: LiquidacionItem[]
   totales: { comision: number; adelantos: number; neto: number }
+}
+
+type LiquidacionHistorial = {
+  id: string
+  created_at: string
+  desde: string
+  hasta: string
+  empleada_id: string
+  empleada_nombre: string
+  empleada_apellido?: string | null
+  items: LiquidacionItem[]
+  total_comision: number
+  total_adelantos: number
+  total_neto: number
 }
 
 type Config = { metodos_pago_config?: { nombre: string }[]; rol?: string }
@@ -188,12 +202,27 @@ export function FinanzasPanel() {
     hasta: new Date(startWeek.getFullYear(), startWeek.getMonth(), startWeek.getDate() + 7).toISOString().slice(0, 10),
   })
   const [filtroLiquidacionEmpleada, setFiltroLiquidacionEmpleada] = useState("")
+  const [showLiquidacionForm, setShowLiquidacionForm] = useState(false)
+  const [guardandoLiquidacion, setGuardandoLiquidacion] = useState(false)
+  const [liquidacionCalcError, setLiquidacionCalcError] = useState<string | null>(null)
+  const [liquidacionReq, setLiquidacionReq] = useState<{
+    desde: string
+    hasta: string
+    empleada_id: string
+    nonce: number
+  } | null>(null)
 
-  const liquidacionKey = canViewLiquidaciones
-    ? filtroLiquidacionEmpleada
-      ? `/api/liquidaciones?desde=${periodo.desde}&hasta=${periodo.hasta}&empleada_id=${filtroLiquidacionEmpleada}`
+  const liquidacionKey =
+    canViewLiquidaciones && liquidacionReq
+      ? `/api/liquidaciones?desde=${liquidacionReq.desde}&hasta=${liquidacionReq.hasta}&empleada_id=${liquidacionReq.empleada_id}&nonce=${liquidacionReq.nonce}`
       : null
-    : null
+
+  const liquidacionesHistorialKey = canViewLiquidaciones ? "/api/liquidaciones/historial?limit=80" : null
+
+  const { data: liquidacionesHistorial, mutate: mutateLiquidacionesHistorial } = useSWR<LiquidacionHistorial[]>(
+    liquidacionesHistorialKey,
+    fetcher,
+  )
   const { data: liquidacionData } = useSWR<LiquidacionDetalle>(liquidacionKey, fetcher)
   const clientesFiltrados = clientesList.filter((c) =>
     `${c.nombre} ${c.apellido}`.toLowerCase().includes(searchCliente.toLowerCase()),
@@ -209,8 +238,18 @@ export function FinanzasPanel() {
     (!servicioSeleccionado || searchServicio.toLowerCase() !== servicioSeleccionado.nombre.toLowerCase())
   const empleadasFiltradas = empleadasList.filter((e) => e.nombre.toLowerCase().includes(searchEmpleada.toLowerCase()))
 
+  const liquidacionesHistorialList = Array.isArray(liquidacionesHistorial) ? liquidacionesHistorial : []
   const liquidacionItems = Array.isArray(liquidacionData?.items) ? liquidacionData.items : []
-  const liquidacionDisponible = Boolean(liquidacionData && liquidacionData.empleada)
+  const liquidacionDisponible =
+    Boolean(
+      liquidacionReq &&
+        liquidacionData &&
+        liquidacionData.empleada &&
+        liquidacionData.empleada.id === liquidacionReq.empleada_id &&
+        liquidacionReq.empleada_id === filtroLiquidacionEmpleada &&
+        liquidacionReq.desde === periodo.desde &&
+        liquidacionReq.hasta === periodo.hasta,
+    )
   const liquidacion = liquidacionDisponible ? liquidacionData : null
   const isSenaPaginated = showAllSenas && !isSenaSearchMode
   const isAdelantoPaginated = showAllAdelantos && !isAdelantoSearchMode
@@ -232,6 +271,7 @@ export function FinanzasPanel() {
   const [liquidacionShareLoading, setLiquidacionShareLoading] = useState(false)
   const [liquidacionShareError, setLiquidacionShareError] = useState<string | null>(null)
   const [liquidacionPreviewFailed, setLiquidacionPreviewFailed] = useState(false)
+  const [liquidacionToShare, setLiquidacionToShare] = useState<LiquidacionDetalle | null>(null)
   const [isAppleMobile, setIsAppleMobile] = useState(false)
 
   useEffect(() => {
@@ -240,15 +280,33 @@ export function FinanzasPanel() {
     setIsAppleMobile(/iPhone|iPad|iPod/i.test(ua))
   }, [])
 
-  const openLiquidacionShare = async () => {
-    if (!liquidacion) return
+  const toLiquidacionDetalle = (row: LiquidacionHistorial): LiquidacionDetalle => ({
+    desde: row.desde,
+    hasta: row.hasta,
+    empleada: {
+      id: row.empleada_id,
+      nombre: row.empleada_nombre || "Sin asignar",
+      apellido: row.empleada_apellido || null,
+    },
+    items: Array.isArray(row.items) ? row.items : [],
+    totales: {
+      comision: Number(row.total_comision || 0),
+      adelantos: Number(row.total_adelantos || 0),
+      neto: Number(row.total_neto || 0),
+    },
+  })
+
+  const openLiquidacionShare = async (target?: LiquidacionDetalle | null) => {
+    const liquidacionSource = target || liquidacion
+    if (!liquidacionSource) return
+    setLiquidacionToShare(liquidacionSource)
     setLiquidacionShareOpen(true)
     setLiquidacionShareLoading(true)
     setLiquidacionShareError(null)
     setLiquidacionShareUrl(null)
     setLiquidacionPreviewFailed(false)
     try {
-      const { url } = await createShareLink({ tipo: "liquidacion", liquidacion })
+      const { url } = await createShareLink({ tipo: "liquidacion", liquidacion: liquidacionSource })
       setLiquidacionShareUrl(url || null)
     } catch {
       setLiquidacionShareError("No se pudo generar el link de la liquidación.")
@@ -278,7 +336,7 @@ export function FinanzasPanel() {
         await navigator.share({
           url: liquidacionShareUrl,
           title: "Liquidación",
-          text: liquidacion ? `Liquidación ${liquidacion.empleada.nombre}` : "Liquidación",
+          text: liquidacionToShare ? `Liquidación ${liquidacionToShare.empleada.nombre}` : "Liquidación",
         })
         return
       } catch (err: any) {
@@ -290,6 +348,52 @@ export function FinanzasPanel() {
       alert("Link copiado.")
     } catch {
       alert("No se pudo copiar el link.")
+    }
+  }
+
+  const handleCalcularLiquidacion = () => {
+    if (!filtroLiquidacionEmpleada) {
+      setLiquidacionCalcError("Selecciona una empleada para calcular la liquidación.")
+      return
+    }
+    setLiquidacionCalcError(null)
+    setLiquidacionReq({
+      desde: periodo.desde,
+      hasta: periodo.hasta,
+      empleada_id: filtroLiquidacionEmpleada,
+      nonce: Date.now(),
+    })
+  }
+
+  const handleGuardarLiquidacion = async () => {
+    if (!filtroLiquidacionEmpleada) {
+      setLiquidacionCalcError("Selecciona una empleada para guardar la liquidación.")
+      return
+    }
+    setLiquidacionCalcError(null)
+    setGuardandoLiquidacion(true)
+    try {
+      const res = await fetch("/api/liquidaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          desde: periodo.desde,
+          hasta: periodo.hasta,
+          empleada_id: filtroLiquidacionEmpleada,
+        }),
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        alert(payload?.error || "No se pudo guardar la liquidación.")
+        return
+      }
+      if (liquidacionesHistorialKey) {
+        mutateLiquidacionesHistorial()
+      }
+      setShowLiquidacionForm(false)
+      alert("Liquidación guardada.")
+    } finally {
+      setGuardandoLiquidacion(false)
     }
   }
 
@@ -826,13 +930,14 @@ export function FinanzasPanel() {
             setLiquidacionShareError(null)
             setLiquidacionShareLoading(false)
             setLiquidacionPreviewFailed(false)
+            setLiquidacionToShare(null)
           }
         }}
       >
         <DialogContent className="sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Compartir liquidación</DialogTitle>
-            <DialogDescription>Vista previa y opciones para compartir la liquidación.</DialogDescription>
+            <DialogTitle>Ver liquidación</DialogTitle>
+            <DialogDescription>Vista previa de la liquidación y opción para compartir.</DialogDescription>
           </DialogHeader>
 
           {liquidacionShareLoading && <p className="text-sm text-muted-foreground">Cargando vista previa...</p>}
@@ -863,17 +968,7 @@ export function FinanzasPanel() {
             <p className="text-sm text-muted-foreground">No se pudo cargar la vista previa.</p>
           )}
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleLiquidacionOpen}
-              disabled={liquidacionShareLoading || !liquidacionShareUrl}
-              className="gap-2"
-            >
-              <ExternalLinkIcon className="h-4 w-4" />
-              Ver
-            </Button>
+          <div className="flex justify-end">
             <Button
               type="button"
               onClick={handleLiquidacionShare}
@@ -890,143 +985,229 @@ export function FinanzasPanel() {
       {canViewLiquidaciones && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <Button variant="secondary" size="sm" className="gap-1" onClick={() => void openLiquidacionShare()} disabled={!liquidacionDisponible}>
-              <PrinterIcon className="h-4 w-4" />
-              Compartir
+            <Button variant="primary" className="gap-2" onClick={() => setShowLiquidacionForm(true)}>
+              <PlusIcon className="h-4 w-4" />
+              Nueva liquidación
             </Button>
           </div>
 
           <Card>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div>
-                  <p className="text-sm font-medium">Desde</p>
-                  <Input
-                    type="date"
-                    value={periodo.desde}
-                    onChange={(e) => setPeriodo((p) => ({ ...p, desde: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Hasta</p>
-                  <Input
-                    type="date"
-                    value={periodo.hasta}
-                    onChange={(e) => setPeriodo((p) => ({ ...p, hasta: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Empleada</p>
-                  <Select value={filtroLiquidacionEmpleada} onValueChange={setFiltroLiquidacionEmpleada}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar empleada" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {empleadasList.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.nombre}
-                          {e.apellido ? ` ${e.apellido}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CalendarIcon className="h-4 w-4" />
-                    {formatDateRange(periodo.desde, periodo.hasta)}
-                  </div>
-                </div>
-              </div>
-
-              {filtroLiquidacionEmpleada && !liquidacionData && (
-                <p className="text-sm text-muted-foreground">Cargando liquidación...</p>
-              )}
-
-              {filtroLiquidacionEmpleada && liquidacionData && !liquidacionDisponible && (
-                <p className="text-sm text-destructive">
-                  {(liquidacionData as any).error || "No se pudo cargar la liquidación."}
-                </p>
-              )}
-
-              {filtroLiquidacionEmpleada && liquidacion && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Empleada</span>
-                    <span className="font-medium">
-                      {liquidacion.empleada.nombre}
-                      {liquidacion.empleada.apellido ? ` ${liquidacion.empleada.apellido}` : ""}
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead>Servicios</TableHead>
-                          <TableHead>Productos</TableHead>
-                          <TableHead className="text-right">Comision</TableHead>
-                          <TableHead>Adelantos</TableHead>
-                          <TableHead className="text-right">Neto a cobrar</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {liquidacionItems.map((item) => {
-                          const isAdelanto = item.tipo === "adelanto"
-                          const fecha = item.fecha ? formatDate(item.fecha) : "-"
-                          const comisionValor =
-                            item.tipo !== "adelanto" && Number.isFinite(Number(item.comision))
-                              ? `$${Number(item.comision || 0).toFixed(2)}`
-                              : "-"
-                          return (
-                            <TableRow key={item.id}>
-                              <TableCell className="text-sm">{fecha}</TableCell>
-                              <TableCell className="text-sm">
-                                {item.tipo === "servicio" ? (
-                                  <p className="font-medium">{item.servicio || "-"}</p>
-                                ) : (
-                                  "-"
-                                )}
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {item.tipo === "producto" ? (
-                                  <p className="font-medium">{item.producto || "-"}</p>
-                                ) : (
-                                  "-"
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right">{comisionValor}</TableCell>
-                              <TableCell className={isAdelanto ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-                                {isAdelanto ? `-$${Math.abs(Number(item.adelanto || 0)).toFixed(2)}` : "-"}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">-</TableCell>
-                            </TableRow>
-                          )
-                        })}
-                        <TableRow>
-                          <TableCell>-</TableCell>
-                          <TableCell className="font-semibold">Totales</TableCell>
-                          <TableCell>-</TableCell>
-                          <TableCell className="text-right font-semibold">
-                            ${Number(liquidacion.totales.comision || 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {Number(liquidacion.totales.adelantos || 0) > 0
-                              ? `-$${Number(liquidacion.totales.adelantos || 0).toFixed(2)}`
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold text-primary">
-                            ${Number(liquidacion.totales.neto || 0).toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
+            <CardContent className="p-0 pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Creada</TableHead>
+                    <TableHead>Período</TableHead>
+                    <TableHead>Empleada</TableHead>
+                    <TableHead className="text-right">Comisión</TableHead>
+                    <TableHead className="text-right">Adelantos</TableHead>
+                    <TableHead className="text-right">Neto</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {liquidacionesHistorialKey && !liquidacionesHistorial ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                        Cargando historial...
+                      </TableCell>
+                    </TableRow>
+                  ) : liquidacionesHistorialList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                        Aún no hay liquidaciones guardadas.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    liquidacionesHistorialList.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="text-xs">{row.created_at ? formatDate(row.created_at) : "-"}</TableCell>
+                        <TableCell className="text-xs">{formatDateRange(row.desde, row.hasta)}</TableCell>
+                        <TableCell className="text-sm">
+                          {row.empleada_nombre}
+                          {row.empleada_apellido ? ` ${row.empleada_apellido}` : ""}
+                        </TableCell>
+                        <TableCell className="text-right">${Number(row.total_comision || 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-right text-destructive">
+                          {Number(row.total_adelantos || 0) > 0 ? `-$${Number(row.total_adelantos || 0).toFixed(2)}` : "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">${Number(row.total_neto || 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void openLiquidacionShare(toLiquidacionDetalle(row))}
+                          >
+                            Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
+
+          <Dialog
+            open={showLiquidacionForm}
+            onOpenChange={(open) => {
+              setShowLiquidacionForm(open)
+              if (!open) {
+                setLiquidacionCalcError(null)
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nueva liquidación</DialogTitle>
+                <DialogDescription>Calcula, revisa y guarda una liquidación para que quede en el historial.</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div>
+                    <p className="text-sm font-medium">Desde</p>
+                    <Input
+                      type="date"
+                      value={periodo.desde}
+                      onChange={(e) => setPeriodo((p) => ({ ...p, desde: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Hasta</p>
+                    <Input
+                      type="date"
+                      value={periodo.hasta}
+                      onChange={(e) => setPeriodo((p) => ({ ...p, hasta: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Empleada</p>
+                    <Select value={filtroLiquidacionEmpleada} onValueChange={setFiltroLiquidacionEmpleada}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar empleada" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {empleadasList.map((e) => (
+                          <SelectItem key={e.id} value={e.id}>
+                            {e.nombre}
+                            {e.apellido ? ` ${e.apellido}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <CalendarIcon className="h-4 w-4" />
+                      {formatDateRange(periodo.desde, periodo.hasta)}
+                    </div>
+                  </div>
+                </div>
+
+                {liquidacionCalcError && <p className="text-sm text-destructive">{liquidacionCalcError}</p>}
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="secondary" onClick={handleCalcularLiquidacion}>
+                    Calcular
+                  </Button>
+                  <Button type="button" onClick={handleGuardarLiquidacion} disabled={!liquidacionDisponible || guardandoLiquidacion}>
+                    {guardandoLiquidacion ? "Guardando..." : "Guardar liquidación"}
+                  </Button>
+                </div>
+
+                {liquidacionReq && !liquidacionData && (
+                  <p className="text-sm text-muted-foreground">Cargando liquidación...</p>
+                )}
+
+                {liquidacionReq && liquidacionData && !liquidacionDisponible && (
+                  <p className="text-sm text-destructive">
+                    {(liquidacionData as any).error || "No se pudo cargar la liquidación."}
+                  </p>
+                )}
+
+                {liquidacionReq && liquidacion && (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Empleada: </span>
+                        <span className="font-medium">
+                          {liquidacion.empleada.nombre}
+                          {liquidacion.empleada.apellido ? ` ${liquidacion.empleada.apellido}` : ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Fecha</TableHead>
+                            <TableHead>Servicios</TableHead>
+                            <TableHead>Productos</TableHead>
+                            <TableHead className="text-right">Comision</TableHead>
+                            <TableHead>Adelantos</TableHead>
+                            <TableHead className="text-right">Neto a cobrar</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {liquidacionItems.map((item) => {
+                            const isAdelanto = item.tipo === "adelanto"
+                            const fecha = item.fecha ? formatDate(item.fecha) : "-"
+                            const comisionValor =
+                              item.tipo !== "adelanto" && Number.isFinite(Number(item.comision))
+                                ? `$${Number(item.comision || 0).toFixed(2)}`
+                                : "-"
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell className="text-sm">{fecha}</TableCell>
+                                <TableCell className="text-sm">
+                                  {item.tipo === "servicio" ? (
+                                    <p className="font-medium">{item.servicio || "-"}</p>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {item.tipo === "producto" ? (
+                                    <p className="font-medium">{item.producto || "-"}</p>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">{comisionValor}</TableCell>
+                                <TableCell className={isAdelanto ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+                                  {isAdelanto ? `-$${Math.abs(Number(item.adelanto || 0)).toFixed(2)}` : "-"}
+                                </TableCell>
+                                <TableCell className="text-right text-muted-foreground">-</TableCell>
+                              </TableRow>
+                            )
+                          })}
+                          <TableRow>
+                            <TableCell>-</TableCell>
+                            <TableCell className="font-semibold">Totales</TableCell>
+                            <TableCell>-</TableCell>
+                            <TableCell className="text-right font-semibold">
+                              ${Number(liquidacion.totales.comision || 0).toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right text-destructive">
+                              {Number(liquidacion.totales.adelantos || 0) > 0
+                                ? `-$${Number(liquidacion.totales.adelantos || 0).toFixed(2)}`
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-primary">
+                              ${Number(liquidacion.totales.neto || 0).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>

@@ -332,123 +332,6 @@ export function ReportesServicios() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Servicios vencidos (+{umbralServiciosVencidos} días)</CardTitle>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Recordatorio</span>
-              <Select
-                value={filtroRecordatorio}
-                onValueChange={(value) => {
-                  setFiltroRecordatorio(value as "all" | "pendiente" | "enviado")
-                  setPaginaRecordatorio(1)
-                }}
-              >
-                <SelectTrigger className="w-[190px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos ({resumenRecordatorios.total})</SelectItem>
-                  <SelectItem value="pendiente">Pendiente ({resumenRecordatorios.pendiente})</SelectItem>
-                  <SelectItem value="enviado">Enviado ({resumenRecordatorios.enviado})</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {serviciosVencidos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin clientas con servicios vencidos para el criterio actual.</p>
-          ) : (
-            <div className="space-y-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Clienta</TableHead>
-                    <TableHead>Servicio vencido</TableHead>
-                    <TableHead>Última vez</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Días</TableHead>
-                    <TableHead className="text-right">Acción</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {serviciosVencidos.map((item) => {
-                    const itemKey = `${item.cliente_id}-${item.servicio_id}`
-                    const enviando = enviandoRecordatorioKey === itemKey
-                    return (
-                      <TableRow key={itemKey}>
-                        <TableCell>{item.clienta}</TableCell>
-                        <TableCell>{item.servicio}</TableCell>
-                        <TableCell>
-                          {new Date(item.ultima_fecha).toLocaleDateString("es-AR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          })}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {item.estado_recordatorio === "enviado" ? (
-                            <span className="text-[color:var(--status-success-fg)]">Enviado</span>
-                          ) : (
-                            <span className="text-[color:var(--status-warning-fg)]">Pendiente</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">{item.dias_desde_ultimo_servicio}</TableCell>
-                        <TableCell className="text-right">
-                          {item.whatsapp_url ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void handleEnviarRecordatorio(item)}
-                              disabled={enviando}
-                            >
-                              {enviando ? "Enviando..." : "Enviar recordatorio"}
-                            </Button>
-                          ) : (
-                            <Button variant="outline" size="sm" disabled>
-                              Sin WhatsApp
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Página {paginacionRecordatorios.page} de {paginacionRecordatorios.total_pages} · {paginacionRecordatorios.total} resultados
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!paginacionRecordatorios.has_prev}
-                    onClick={() => setPaginaRecordatorio((prev) => Math.max(1, prev - 1))}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!paginacionRecordatorios.has_next}
-                    onClick={() =>
-                      setPaginaRecordatorio((prev) => Math.min(paginacionRecordatorios.total_pages || prev, prev + 1))
-                    }
-                  >
-                    Siguiente
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Detalle por servicio</CardTitle>
         </CardHeader>
         <CardContent>
@@ -589,6 +472,123 @@ export function ReportesServicios() {
             <span>Total general</span>
             <strong>${(reporte?.resumen?.total_general || 0).toFixed(2)}</strong>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Servicios vencidos (+{umbralServiciosVencidos} días)</CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Recordatorio</span>
+              <Select
+                value={filtroRecordatorio}
+                onValueChange={(value) => {
+                  setFiltroRecordatorio(value as "all" | "pendiente" | "enviado")
+                  setPaginaRecordatorio(1)
+                }}
+              >
+                <SelectTrigger className="w-[190px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos ({resumenRecordatorios.total})</SelectItem>
+                  <SelectItem value="pendiente">Pendiente ({resumenRecordatorios.pendiente})</SelectItem>
+                  <SelectItem value="enviado">Enviado ({resumenRecordatorios.enviado})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {serviciosVencidos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin clientas con servicios vencidos para el criterio actual.</p>
+          ) : (
+            <div className="space-y-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Clienta</TableHead>
+                    <TableHead>Servicio vencido</TableHead>
+                    <TableHead>Última vez</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Días</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serviciosVencidos.map((item) => {
+                    const itemKey = `${item.cliente_id}-${item.servicio_id}`
+                    const enviando = enviandoRecordatorioKey === itemKey
+                    return (
+                      <TableRow key={itemKey}>
+                        <TableCell>{item.clienta}</TableCell>
+                        <TableCell>{item.servicio}</TableCell>
+                        <TableCell>
+                          {new Date(item.ultima_fecha).toLocaleDateString("es-AR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {item.estado_recordatorio === "enviado" ? (
+                            <span className="text-[color:var(--status-success-fg)]">Enviado</span>
+                          ) : (
+                            <span className="text-[color:var(--status-warning-fg)]">Pendiente</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">{item.dias_desde_ultimo_servicio}</TableCell>
+                        <TableCell className="text-right">
+                          {item.whatsapp_url ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleEnviarRecordatorio(item)}
+                              disabled={enviando}
+                            >
+                              {enviando ? "Enviando..." : "Enviar recordatorio"}
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" disabled>
+                              Sin WhatsApp
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Página {paginacionRecordatorios.page} de {paginacionRecordatorios.total_pages} · {paginacionRecordatorios.total} resultados
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!paginacionRecordatorios.has_prev}
+                    onClick={() => setPaginaRecordatorio((prev) => Math.max(1, prev - 1))}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!paginacionRecordatorios.has_next}
+                    onClick={() =>
+                      setPaginaRecordatorio((prev) => Math.min(paginacionRecordatorios.total_pages || prev, prev + 1))
+                    }
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
