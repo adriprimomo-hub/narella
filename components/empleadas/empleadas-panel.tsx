@@ -584,6 +584,7 @@ export function EmpleadasPanel() {
             </DialogDescription>
           </DialogHeader>
           <EmpleadaForm
+            key={selected?.id || "new"}
             empleada={selected}
             onCancel={() => {
               setSelected(null)

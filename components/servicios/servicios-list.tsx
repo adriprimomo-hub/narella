@@ -252,6 +252,7 @@ export function ServiciosList() {
             </DialogDescription>
           </DialogHeader>
           <ServicioForm
+            key={selected?.id || "new"}
             servicio={selected}
             onSuccess={() => {
               mutate()

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useId } from "react"
+import { useEffect, useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,6 +32,12 @@ export function ClienteForm({ cliente, onSuccess }: ClienteFormProps) {
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState("")
   const [errors, setErrors] = useState<{ nombre?: string; apellido?: string; telefono?: string }>({})
+
+  useEffect(() => {
+    setFormData(buildFormData(cliente))
+    setFormError("")
+    setErrors({})
+  }, [cliente])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

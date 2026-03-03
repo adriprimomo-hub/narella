@@ -204,7 +204,7 @@ const fillGiftcardTemplatePdf = async (templatePdfDataUrl: string, data: Giftcar
     font: fontRegular,
     text: validoHasta,
     x: 279,
-    y: yFromTop(266),
+    y: yFromTop(262),
     maxWidth: 70,
     baseSize: 10.2,
     color: textColor,
