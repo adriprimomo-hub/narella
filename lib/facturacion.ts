@@ -559,11 +559,46 @@ const cbteLetter = (cbteTipo: number) => {
 const formatCbteNumber = (puntoVenta: number, numero: number) =>
   `${String(Number(puntoVenta) || 0).padStart(5, "0")}-${String(Number(numero) || 0).padStart(8, "0")}`
 
+const parseBase64DataUrl = (value: string | null | undefined) => {
+  const match = String(value || "").match(/^data:(.*?);base64,(.+)$/)
+  if (!match) return null
+  const mime = String(match[1] || "").trim()
+  const base64 = String(match[2] || "").trim()
+  if (!mime || !base64) return null
+  try {
+    const buffer = Buffer.from(base64, "base64")
+    return { mime, buffer }
+  } catch {
+    return null
+  }
+}
+
+const trimLogoDataUrl = async (value: string | null) => {
+  if (!value) return null
+  const parsed = parseBase64DataUrl(value)
+  if (!parsed || !parsed.mime.toLowerCase().startsWith("image/")) return value
+
+  try {
+    const sharpModule = await import("sharp")
+    const sharpFactory: any = (sharpModule as any)?.default || sharpModule
+    if (!sharpFactory) return value
+
+    const trimmed = await sharpFactory(parsed.buffer, { failOn: "none" })
+      .trim({ threshold: 12, background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .png()
+      .toBuffer()
+
+    return `data:image/png;base64,${trimmed.toString("base64")}`
+  } catch {
+    return value
+  }
+}
+
 const buildLogoDataUrl = async (logoUrl: string) => {
   if (!logoUrl) return null
   if (logoUrl.startsWith("data:image/")) {
     if (logoUrl.toLowerCase().startsWith("data:image/svg+xml")) return null
-    return logoUrl
+    return trimLogoDataUrl(logoUrl)
   }
 
   const isHttp = logoUrl.startsWith("http://") || logoUrl.startsWith("https://")
@@ -574,7 +609,7 @@ const buildLogoDataUrl = async (logoUrl: string) => {
       const buffer = fs.readFileSync(filePath)
       if (ext === ".svg") return null
       const contentType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png"
-      return `data:${contentType};base64,${buffer.toString("base64")}`
+      return trimLogoDataUrl(`data:${contentType};base64,${buffer.toString("base64")}`)
     }
   }
   try {
@@ -584,7 +619,7 @@ const buildLogoDataUrl = async (logoUrl: string) => {
     const contentType = res.headers.get("content-type") || "image/png"
     if (contentType.toLowerCase().includes("svg")) return null
     const base64 = buffer.toString("base64")
-    return `data:${contentType};base64,${base64}`
+    return trimLogoDataUrl(`data:${contentType};base64,${base64}`)
   } catch (error) {
     console.warn("[facturacion] No se pudo cargar logo", error)
     return null
@@ -724,7 +759,7 @@ const buildFacturaHtml = (
     <style>
       * { box-sizing: border-box; }
       body { margin: 0; padding: 22px; font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 12px; }
-      .top-line { height: 6px; background: #6f8d5d; border-radius: 4px; margin-bottom: 12px; }
+      .top-line { height: 6px; background: #e5568a; border-radius: 4px; margin-bottom: 12px; }
       .head-grid { display: grid; grid-template-columns: 1.25fr 0.9fr; gap: 12px; }
       .logo-card { min-height: 144px; border: 1px solid #d6c8b0; border-radius: 12px; background: #f7f1e6; display: flex; align-items: center; justify-content: center; padding: 10px; }
       .logo-placeholder { color: #5f7f4f; font-weight: 700; letter-spacing: 0.12em; }
@@ -936,6 +971,7 @@ const buildFacturaPDF = async (
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 24
   const contentWidth = pageWidth - margin * 2
+  const topBarPink: [number, number, number] = [229, 86, 138]
   const accentGreen: [number, number, number] = [95, 127, 79]
   const beigeSoftFill: [number, number, number] = [247, 241, 230]
   const beigeSoftBorder: [number, number, number] = [214, 200, 176]
@@ -952,7 +988,7 @@ const buildFacturaPDF = async (
     y = margin
   }
 
-  doc.setFillColor(...accentGreen)
+  doc.setFillColor(...topBarPink)
   doc.roundedRect(margin, y, contentWidth, 6, 3, 3, "F")
   y += 14
 
