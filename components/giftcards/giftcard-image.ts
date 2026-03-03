@@ -56,14 +56,49 @@ const ensureFonts = async () => {
   }
 }
 
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error("Formato de archivo no soportado"))
+    }
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
+    reader.readAsDataURL(blob)
+  })
+
+const resolveTemplatePdfDataUrl = async (source: string | null | undefined) => {
+  const value = String(source || "").trim()
+  if (!value) return null
+  const lower = value.toLowerCase()
+
+  if (lower.startsWith("data:application/pdf;")) return value
+  if (lower.startsWith("data:")) return null
+
+  try {
+    const res = await fetch(value, { cache: "no-store" })
+    if (!res.ok) return null
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase()
+    const isPdf = contentType.includes("application/pdf") || lower.includes(".pdf")
+    if (!isPdf) return null
+    const blob = await res.blob()
+    return await blobToDataUrl(blob)
+  } catch {
+    return null
+  }
+}
+
 export const generarGiftcardImagen = async (data: GiftcardImageInput) => {
   if (typeof document === "undefined") {
     throw new Error("Solo disponible en el navegador")
   }
 
-  const templateDataUrl = String(data.templateDataUrl || "").trim()
-  if (templateDataUrl.toLowerCase().startsWith("data:application/pdf;")) {
-    return templateDataUrl
+  const templatePdfDataUrl = await resolveTemplatePdfDataUrl(data.templateDataUrl)
+  if (templatePdfDataUrl) {
+    return templatePdfDataUrl
   }
 
   await ensureFonts()

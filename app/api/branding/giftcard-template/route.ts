@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 
 const DEFAULT_GIFTCARD_TEMPLATE_PATH = "certs/giftcards/giftcard-template.pdf"
+const DEFAULT_GIFTCARD_TEMPLATE_PUBLIC_URL = "/templates/giftcard-template.pdf"
 
 const mimeFromExtension = (filePath: string) => {
   const ext = path.extname(filePath).toLowerCase()
@@ -30,5 +31,8 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   const dataUrl = readTemplateDataUrl()
-  return NextResponse.json({ data_url: dataUrl || null }, { headers: { "Cache-Control": "no-store" } })
+  return NextResponse.json(
+    { data_url: dataUrl || null, public_url: DEFAULT_GIFTCARD_TEMPLATE_PUBLIC_URL },
+    { headers: { "Cache-Control": "no-store" } },
+  )
 }
