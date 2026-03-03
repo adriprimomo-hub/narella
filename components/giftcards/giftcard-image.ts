@@ -1,3 +1,5 @@
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib"
+
 export type GiftcardImageInput = {
   numero: string
   cliente: string
@@ -6,6 +8,7 @@ export type GiftcardImageInput = {
   deParteDe?: string | null
   logoDataUrl?: string | null
   templateDataUrl?: string | null
+  montoTotal?: number | null
 }
 
 const loadImage = (src: string) =>
@@ -70,6 +73,153 @@ const blobToDataUrl = (blob: Blob) =>
     reader.readAsDataURL(blob)
   })
 
+const parseDataUrl = (value: string) => {
+  const match = String(value || "").match(/^data:(.*?);base64,(.+)$/)
+  if (!match) return null
+  return { mime: String(match[1] || ""), base64: String(match[2] || "") }
+}
+
+const base64ToBytes = (base64: string) => {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+const formatDateEsAr = (value: string | null | undefined) => {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleDateString("es-AR")
+}
+
+const fitText = (font: PDFFont, text: string, maxWidth: number, baseSize: number, minSize = 8) => {
+  let size = baseSize
+  const raw = String(text || "").trim()
+  let value = raw || "-"
+
+  while (size > minSize && font.widthOfTextAtSize(value, size) > maxWidth) {
+    size -= 0.5
+  }
+  if (font.widthOfTextAtSize(value, size) <= maxWidth) {
+    return { text: value, size }
+  }
+
+  value = raw || "-"
+  while (value.length > 1 && font.widthOfTextAtSize(`${value}...`, size) > maxWidth) {
+    value = value.slice(0, -1)
+  }
+  return { text: `${value}...`, size }
+}
+
+const drawFittedText = (args: {
+  page: PDFPage
+  font: PDFFont
+  text: string
+  x: number
+  y: number
+  maxWidth: number
+  baseSize: number
+  color: ReturnType<typeof rgb>
+}) => {
+  const fitted = fitText(args.font, args.text, args.maxWidth, args.baseSize)
+  args.page.drawText(fitted.text, {
+    x: args.x,
+    y: args.y,
+    size: fitted.size,
+    font: args.font,
+    color: args.color,
+  })
+}
+
+const fillGiftcardTemplatePdf = async (templatePdfDataUrl: string, data: GiftcardImageInput) => {
+  const parsed = parseDataUrl(templatePdfDataUrl)
+  if (!parsed || !parsed.mime.toLowerCase().includes("pdf")) return templatePdfDataUrl
+
+  const pdfDoc = await PDFDocument.load(base64ToBytes(parsed.base64))
+  const pages = pdfDoc.getPages()
+  if (!pages.length) return templatePdfDataUrl
+  const page = pages[0]
+
+  const textColor = rgb(0.17, 0.14, 0.13)
+  const darkGold = rgb(0.55, 0.4, 0.27)
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+  const deParteDe = String(data.deParteDe || "").trim() || "Narella"
+  const para = String(data.cliente || "").trim() || "Cliente"
+  const monto = Number(data.montoTotal || 0)
+  const servicios = Array.isArray(data.servicios) ? data.servicios.filter(Boolean) : []
+  const valePor =
+    monto > 0
+      ? `ARS $${monto.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : servicios.length
+        ? servicios.join(", ")
+        : "Servicio"
+  const validoHasta = formatDateEsAr(data.validoHasta)
+
+  // Coordenadas calibradas para certs/giftcards/giftcard-template.pdf (419.25 x 297.75 pt)
+  drawFittedText({
+    page,
+    font: fontBold,
+    text: deParteDe,
+    x: 145,
+    y: 110,
+    maxWidth: 170,
+    baseSize: 13,
+    color: textColor,
+  })
+  drawFittedText({
+    page,
+    font: fontBold,
+    text: para,
+    x: 145,
+    y: 81,
+    maxWidth: 170,
+    baseSize: 13,
+    color: textColor,
+  })
+  drawFittedText({
+    page,
+    font: fontBold,
+    text: valePor,
+    x: 182,
+    y: 53,
+    maxWidth: 133,
+    baseSize: 12,
+    color: textColor,
+  })
+  drawFittedText({
+    page,
+    font: fontRegular,
+    text: validoHasta,
+    x: 280,
+    y: 22,
+    maxWidth: 70,
+    baseSize: 10,
+    color: textColor,
+  })
+
+  if (data.numero) {
+    drawFittedText({
+      page,
+      font: fontRegular,
+      text: `Nro ${data.numero}`,
+      x: 312,
+      y: 264,
+      maxWidth: 95,
+      baseSize: 9,
+      color: darkGold,
+    })
+  }
+
+  const bytes = await pdfDoc.save()
+  const normalizedBytes = Uint8Array.from(bytes)
+  return blobToDataUrl(new Blob([normalizedBytes], { type: "application/pdf" }))
+}
+
 const resolveTemplatePdfDataUrl = async (source: string | null | undefined) => {
   const value = String(source || "").trim()
   if (!value) return null
@@ -98,7 +248,11 @@ export const generarGiftcardImagen = async (data: GiftcardImageInput) => {
 
   const templatePdfDataUrl = await resolveTemplatePdfDataUrl(data.templateDataUrl)
   if (templatePdfDataUrl) {
-    return templatePdfDataUrl
+    try {
+      return await fillGiftcardTemplatePdf(templatePdfDataUrl, data)
+    } catch {
+      return templatePdfDataUrl
+    }
   }
 
   await ensureFonts()

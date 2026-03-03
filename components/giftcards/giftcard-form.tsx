@@ -162,6 +162,7 @@ export function GiftcardForm({
           servicios: serviciosSeleccionadosDetalle.map((s) => s.nombre),
           validoHasta: giftcardData.valido_hasta || null,
           deParteDe: deParteDe.trim() || null,
+          montoTotal: Number(giftcardData.monto_total || 0),
           logoDataUrl: logoDataUrl || null,
           templateDataUrl: templateDataUrl || null,
         })
