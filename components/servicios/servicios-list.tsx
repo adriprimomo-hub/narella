@@ -62,6 +62,7 @@ export function ServiciosList() {
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
   const isAdmin = config?.rol === "admin"
   const [selected, setSelected] = useState<Servicio | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState("")
   const servicios = Array.isArray(serviciosResponse?.items) ? serviciosResponse.items : []
@@ -99,12 +100,28 @@ export function ServiciosList() {
     mutate()
   }
 
+  const cloneServicio = (servicio: Servicio): Servicio => ({
+    ...servicio,
+    empleadas_habilitadas: Array.isArray(servicio.empleadas_habilitadas) ? [...servicio.empleadas_habilitadas] : [],
+    empleadas_comision: Array.isArray(servicio.empleadas_comision)
+      ? servicio.empleadas_comision.map((c) => ({ ...c }))
+      : [],
+  })
+
+  const selectedFromList = editingId ? (servicios.find((item) => item.id === editingId) ?? null) : null
+  const selectedForForm = editingId
+    ? selected?.id === editingId
+      ? selected
+      : selectedFromList
+    : null
+
   return (
     <div className="space-y-6">
       {isAdmin && (
         <div className="flex justify-between items-center">
           <Button
             onClick={() => {
+              setEditingId(null)
               setSelected(null)
               setShowForm(true)
             }}
@@ -182,7 +199,8 @@ export function ServiciosList() {
                               size="sm"
                               variant="secondary"
                               onClick={() => {
-                                setSelected(servicio)
+                                setEditingId(servicio.id)
+                                setSelected(cloneServicio(servicio))
                                 setShowForm(true)
                               }}
                               className="gap-1.5"
@@ -236,31 +254,37 @@ export function ServiciosList() {
       </Card>
 
       <Dialog
-        open={showForm && isAdmin}
+        open={showForm}
         onOpenChange={(open) => {
           if (!open) {
             setShowForm(false)
+            setEditingId(null)
             setSelected(null)
           }
         }}
       >
         <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selected ? "Editar servicio" : "Nuevo servicio"}</DialogTitle>
+            <DialogTitle>{editingId ? "Editar servicio" : "Nuevo servicio"}</DialogTitle>
             <DialogDescription className="sr-only">
-              Formulario para {selected ? "editar" : "crear"} un servicio.
+              Formulario para {editingId ? "editar" : "crear"} un servicio.
             </DialogDescription>
           </DialogHeader>
-          <ServicioForm
-            key={selected?.id || "new"}
-            servicio={selected}
-            onSuccess={() => {
-              mutate()
-              setSelected(null)
-              setPage(1)
-              setShowForm(false)
-            }}
-          />
+          {editingId && !selectedForForm ? (
+            <p className="text-sm text-muted-foreground">Cargando datos del servicio...</p>
+          ) : (
+            <ServicioForm
+              key={editingId || "new"}
+              servicio={selectedForForm}
+              onSuccess={() => {
+                mutate()
+                setEditingId(null)
+                setSelected(null)
+                setPage(1)
+                setShowForm(false)
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
