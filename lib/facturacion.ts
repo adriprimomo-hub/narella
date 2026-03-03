@@ -724,40 +724,40 @@ const buildFacturaHtml = (
     <style>
       * { box-sizing: border-box; }
       body { margin: 0; padding: 22px; font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 12px; }
-      .top-line { height: 6px; background: #e5568a; border-radius: 4px; margin-bottom: 12px; }
+      .top-line { height: 6px; background: #6f8d5d; border-radius: 4px; margin-bottom: 12px; }
       .head-grid { display: grid; grid-template-columns: 1.25fr 0.9fr; gap: 12px; }
-      .logo-card { min-height: 144px; border: 1px solid #f3bfd3; border-radius: 12px; background: #fff6fb; display: flex; align-items: center; justify-content: center; padding: 10px; }
-      .logo-placeholder { color: #d9457c; font-weight: 700; letter-spacing: 0.12em; }
-      .doc-card { border: 1px solid #f3bfd3; border-radius: 12px; background: #fff6fb; padding: 10px; text-align: center; }
+      .logo-card { min-height: 144px; border: 1px solid #d6c8b0; border-radius: 12px; background: #f7f1e6; display: flex; align-items: center; justify-content: center; padding: 10px; }
+      .logo-placeholder { color: #5f7f4f; font-weight: 700; letter-spacing: 0.12em; }
+      .doc-card { border: 1px solid #d6c8b0; border-radius: 12px; background: #f7f1e6; padding: 10px; text-align: center; }
       .doc-copy { font-size: 10px; color: #6b7280; margin-bottom: 2px; }
-      .doc-letter { font-size: 34px; line-height: 1; color: #d9457c; font-weight: 700; margin: 2px 0; }
+      .doc-letter { font-size: 34px; line-height: 1; color: #5f7f4f; font-weight: 700; margin: 2px 0; }
       .doc-code { font-size: 11px; color: #6b7280; }
       .doc-title { font-size: 17px; font-weight: 700; margin-top: 2px; color: #111827; }
-      .doc-number { margin-top: 4px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; color: #d9457c; }
+      .doc-number { margin-top: 4px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; color: #5f7f4f; }
       .doc-date { margin-top: 4px; font-size: 11px; color: #374151; }
       .issuer { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
       .issuer h1 { margin: 0 0 6px 0; font-size: 18px; color: #111827; }
       .issuer p { margin: 2px 0; }
       .muted { color: #6b7280; }
-      .client-box { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #f9fafb; }
+      .client-box { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #f9f5ec; }
       .client-box p { margin: 2px 0; }
       table { width: 100%; border-collapse: collapse; margin-top: 10px; }
       th, td { border: 1px solid #e5e7eb; padding: 7px 8px; vertical-align: top; }
-      th { background: #e5568a; color: white; text-align: left; }
+      th { background: #6f8d5d; color: white; text-align: left; }
       .num { text-align: right; white-space: nowrap; }
       .row-discount td { color: #b91c1c; }
       .totals { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; background: #fff; }
       .totals p { margin: 2px 0; }
-      .totals p:last-child { font-size: 15px; font-weight: 700; color: #d9457c; margin-top: 4px; }
-      .fiscal-box { margin-top: 10px; border: 1px solid #f3bfd3; border-radius: 12px; background: #fff6fb; padding: 10px; display: grid; grid-template-columns: 1fr 160px; gap: 10px; align-items: start; }
+      .totals p:last-child { font-size: 15px; font-weight: 700; color: #5f7f4f; margin-top: 4px; }
+      .fiscal-box { margin-top: 10px; border: 1px solid #d6c8b0; border-radius: 12px; background: #f7f1e6; padding: 10px; display: grid; grid-template-columns: 1fr 160px; gap: 10px; align-items: start; }
       .fiscal-box p { margin: 2px 0; }
       .fiscal-title { font-weight: 700; color: #111827; }
-      .fiscal-values { font-weight: 700; color: #d9457c; }
+      .fiscal-values { font-weight: 700; color: #5f7f4f; }
       .fiscal-right { display: flex; flex-direction: column; align-items: center; gap: 8px; }
       .arca-badge { width: 100%; min-height: 48px; border-radius: 10px; border: 1px solid #0d3b66; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 6px; }
       .arca-fallback { color: #0d3b66; font-weight: 700; letter-spacing: 0.08em; }
       .arca-caption { font-size: 10px; color: #0d3b66; font-weight: 700; text-transform: uppercase; text-align: center; }
-      .qr-box { width: 150px; height: 150px; border: 1px solid #f3bfd3; border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 10px; text-align: center; padding: 6px; }
+      .qr-box { width: 150px; height: 150px; border: 1px solid #d6c8b0; border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 10px; text-align: center; padding: 6px; }
       .footer-note { margin-top: 8px; color: #6b7280; line-height: 1.4; }
       .cae-footer { margin-top: 8px; border-top: 1px dashed #d1d5db; padding-top: 6px; color: #374151; font-size: 11px; display: flex; gap: 18px; flex-wrap: wrap; }
       p { margin: 4px 0; }
@@ -936,9 +936,9 @@ const buildFacturaPDF = async (
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 24
   const contentWidth = pageWidth - margin * 2
-  const pink: [number, number, number] = [229, 86, 138]
-  const pinkSoftFill: [number, number, number] = [255, 246, 251]
-  const pinkSoftBorder: [number, number, number] = [243, 191, 211]
+  const accentGreen: [number, number, number] = [95, 127, 79]
+  const beigeSoftFill: [number, number, number] = [247, 241, 230]
+  const beigeSoftBorder: [number, number, number] = [214, 200, 176]
   const grayBorder: [number, number, number] = [229, 231, 235]
   const textMain: [number, number, number] = [17, 24, 39]
   const textMuted: [number, number, number] = [107, 114, 128]
@@ -952,7 +952,7 @@ const buildFacturaPDF = async (
     y = margin
   }
 
-  doc.setFillColor(...pink)
+  doc.setFillColor(...accentGreen)
   doc.roundedRect(margin, y, contentWidth, 6, 3, 3, "F")
   y += 14
 
@@ -964,8 +964,8 @@ const buildFacturaPDF = async (
   const leftX = margin
   const rightX = leftX + leftHeaderW + headerGap
 
-  doc.setFillColor(...pinkSoftFill)
-  doc.setDrawColor(...pinkSoftBorder)
+  doc.setFillColor(...beigeSoftFill)
+  doc.setDrawColor(...beigeSoftBorder)
   doc.roundedRect(leftX, y, leftHeaderW, headerH, 10, 10, "FD")
   const logoPadding = 12
   const logoDrawn = drawContainedImage(doc, logoDataUrl, {
@@ -975,21 +975,21 @@ const buildFacturaPDF = async (
     h: headerH - logoPadding * 2,
   })
   if (!logoDrawn) {
-    doc.setTextColor(...pink)
+    doc.setTextColor(...accentGreen)
     doc.setFont("helvetica", "bold")
     doc.setFontSize(16)
     doc.text("LOGO", leftX + leftHeaderW / 2, y + headerH / 2 + 5, { align: "center" })
   }
 
-  doc.setFillColor(...pinkSoftFill)
-  doc.setDrawColor(...pinkSoftBorder)
+  doc.setFillColor(...beigeSoftFill)
+  doc.setDrawColor(...beigeSoftBorder)
   doc.roundedRect(rightX, y, rightHeaderW, headerH, 10, 10, "FD")
   const centerX = rightX + rightHeaderW / 2
   doc.setTextColor(...textMuted)
   doc.setFont("helvetica", "normal")
   doc.setFontSize(9)
   doc.text("ORIGINAL", centerX, y + 16, { align: "center" })
-  doc.setTextColor(...pink)
+  doc.setTextColor(...accentGreen)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(34)
   doc.text(comprobanteLetter || "-", centerX, y + 50, { align: "center" })
@@ -1001,7 +1001,7 @@ const buildFacturaPDF = async (
   doc.setFont("helvetica", "bold")
   doc.setFontSize(14)
   doc.text(comprobante, centerX, y + 84, { align: "center" })
-  doc.setTextColor(...pink)
+  doc.setTextColor(...accentGreen)
   doc.setFontSize(12)
   doc.text(comprobanteNumero, centerX, y + 100, { align: "center" })
   doc.setTextColor(...textMain)
@@ -1076,7 +1076,7 @@ const buildFacturaPDF = async (
       textColor: textMain,
     },
     headStyles: {
-      fillColor: pink,
+      fillColor: accentGreen,
       textColor: [255, 255, 255],
       fontStyle: "bold",
       halign: "left",
@@ -1111,7 +1111,7 @@ const buildFacturaPDF = async (
   totalY += 13
   doc.text(`Importe otros tributos: ARS ${formatMoney(otrosImpNacionales)}`, margin + 12, totalY)
   totalY += 16
-  doc.setTextColor(...pink)
+  doc.setTextColor(...accentGreen)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(13)
   doc.text(`Importe total: ARS ${formatMoney(factura.total)}`, margin + 12, totalY)
@@ -1119,8 +1119,8 @@ const buildFacturaPDF = async (
 
   ensureSpace(164)
   const fiscalH = 158
-  doc.setDrawColor(...pinkSoftBorder)
-  doc.setFillColor(...pinkSoftFill)
+  doc.setDrawColor(...beigeSoftBorder)
+  doc.setFillColor(...beigeSoftFill)
   doc.roundedRect(margin, y, contentWidth, fiscalH, 10, 10, "FD")
 
   const rightColW = 160
@@ -1137,7 +1137,7 @@ const buildFacturaPDF = async (
   )
   doc.text(fiscalTitleLines, fiscalLeftX, y + 18)
 
-  doc.setTextColor(...pink)
+  doc.setTextColor(...accentGreen)
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
   const fiscalValueLines = doc.splitTextToSize(
@@ -1165,7 +1165,7 @@ const buildFacturaPDF = async (
   doc.text("Comprobante autorizado", fiscalRightX + rightColW / 2, y + 54, { align: "center" })
 
   doc.setFillColor(255, 255, 255)
-  doc.setDrawColor(...pinkSoftBorder)
+  doc.setDrawColor(...beigeSoftBorder)
   doc.roundedRect(fiscalRightX + 5, y + 62, rightColW - 10, 90, 8, 8, "FD")
   const qrDrawn = drawContainedImage(doc, qrDataUrl, {
     x: fiscalRightX + 10,

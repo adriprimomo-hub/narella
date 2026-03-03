@@ -5,6 +5,7 @@ export type GiftcardImageInput = {
   validoHasta?: string | null
   deParteDe?: string | null
   logoDataUrl?: string | null
+  templateDataUrl?: string | null
 }
 
 const loadImage = (src: string) =>
@@ -58,6 +59,11 @@ const ensureFonts = async () => {
 export const generarGiftcardImagen = async (data: GiftcardImageInput) => {
   if (typeof document === "undefined") {
     throw new Error("Solo disponible en el navegador")
+  }
+
+  const templateDataUrl = String(data.templateDataUrl || "").trim()
+  if (templateDataUrl.toLowerCase().startsWith("data:application/pdf;")) {
+    return templateDataUrl
   }
 
   await ensureFonts()

@@ -32,6 +32,7 @@ type GiftcardFormProps = {
   servicios: Servicio[]
   metodosPago: string[]
   logoDataUrl?: string | null
+  templateDataUrl?: string | null
   onSuccess: (result: {
     giftcard: GiftcardData
     imagen_base64?: string | null
@@ -42,7 +43,15 @@ type GiftcardFormProps = {
   }) => void
 }
 
-export function GiftcardForm({ giftcard, clientes, servicios, metodosPago, logoDataUrl, onSuccess }: GiftcardFormProps) {
+export function GiftcardForm({
+  giftcard,
+  clientes,
+  servicios,
+  metodosPago,
+  logoDataUrl,
+  templateDataUrl,
+  onSuccess,
+}: GiftcardFormProps) {
   const [clienteQuery, setClienteQuery] = useState("")
   const [servicioQuery, setServicioQuery] = useState("")
   const [selectedClienteId, setSelectedClienteId] = useState(giftcard?.cliente_id || "")
@@ -154,6 +163,7 @@ export function GiftcardForm({ giftcard, clientes, servicios, metodosPago, logoD
           validoHasta: giftcardData.valido_hasta || null,
           deParteDe: deParteDe.trim() || null,
           logoDataUrl: logoDataUrl || null,
+          templateDataUrl: templateDataUrl || null,
         })
         if (imagenBase64) {
           await fetch(`/api/giftcards/${giftcardData.id}`, {

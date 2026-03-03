@@ -13,6 +13,24 @@ const parseDataUrl = (dataUrl: string) => {
   return { mime: match[1], base64: match[2] }
 }
 
+const extensionFromMime = (mime: string, fallback = "bin") => {
+  const normalized = String(mime || "").toLowerCase()
+  if (normalized.includes("pdf")) return "pdf"
+  if (normalized.includes("png")) return "png"
+  if (normalized.includes("webp")) return "webp"
+  if (normalized.includes("gif")) return "gif"
+  return fallback
+}
+
+const mimeFromPath = (value: string | null | undefined) => {
+  const normalized = String(value || "").toLowerCase()
+  if (normalized.endsWith(".pdf")) return "application/pdf"
+  if (normalized.endsWith(".png")) return "image/png"
+  if (normalized.endsWith(".webp")) return "image/webp"
+  if (normalized.endsWith(".gif")) return "image/gif"
+  return "image/jpeg"
+}
+
 const isMissingColumnError = (error: any, column: string) => {
   const message = String(error?.message || "").toLowerCase()
   const code = String(error?.code || "")
@@ -145,9 +163,10 @@ export async function GET(_request: Request, { params }: ShareRouteContext) {
       base64 = parsed?.base64 || giftcard.imagen_base64
       mime = parsed?.mime || "image/jpeg"
     } else if (buffer) {
-      mime = link.mime_type || "image/jpeg"
+      mime = link.mime_type || mimeFromPath(giftcard?.imagen_storage_path)
     }
-    filename = giftcard.numero ? `giftcard-${giftcard.numero}.jpg` : "giftcard.jpg"
+    const extension = extensionFromMime(mime, "jpg")
+    filename = giftcard.numero ? `giftcard-${giftcard.numero}.${extension}` : `giftcard.${extension}`
   }
 
   if (!buffer && !base64) {

@@ -51,6 +51,7 @@ export function GiftcardsPanel() {
   const { data: servicios = [] } = useSWR<Servicio[]>("/api/servicios", fetcher)
   const { data: config } = useSWR<Config>("/api/config", fetcher)
   const { data: branding } = useSWR<{ data_url?: string | null }>("/api/branding/logo", fetcher)
+  const { data: giftcardTemplate } = useSWR<{ data_url?: string | null }>("/api/branding/giftcard-template", fetcher)
   const giftcards = Array.isArray(giftcardsResponse?.items) ? giftcardsResponse.items : []
   const pagination = giftcardsResponse?.pagination || {
     page,
@@ -274,6 +275,7 @@ export function GiftcardsPanel() {
             servicios={servicios}
             metodosPago={metodosPago}
             logoDataUrl={branding?.data_url || null}
+            templateDataUrl={giftcardTemplate?.data_url || null}
             onSuccess={({ giftcard, imagen_base64, factura, factura_id, factura_pendiente, factura_error }) => {
               mutate()
               setPage(1)

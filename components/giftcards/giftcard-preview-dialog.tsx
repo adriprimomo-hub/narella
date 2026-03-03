@@ -32,6 +32,10 @@ export function GiftcardPreviewDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const previewSrc = imageDataUrl || shareUrl
+  const isInlineImage = Boolean(previewSrc && previewSrc.startsWith("data:image/"))
+  const isInlinePdf = Boolean(previewSrc && previewSrc.startsWith("data:application/pdf"))
+  const showImagePreview = Boolean(previewSrc) && isInlineImage
+  const showDocumentPreview = Boolean(previewSrc) && (isInlinePdf || !isInlineImage)
 
   useEffect(() => {
     let active = true
@@ -95,16 +99,29 @@ export function GiftcardPreviewDialog({
           <DialogTitle>Giftcard generada</DialogTitle>
         </DialogHeader>
 
-        {previewSrc ? (
+        {showImagePreview ? (
           <div className="space-y-3">
             <Image
-              src={previewSrc}
+              src={previewSrc as string}
               alt="Giftcard"
               width={1200}
               height={675}
               unoptimized
               className="w-full rounded-lg border h-auto"
             />
+            <div className="text-sm text-muted-foreground">
+              {info?.numero && <div>Número: {info.numero}</div>}
+              {info?.cliente && <div>Clienta: {info.cliente}</div>}
+              {info?.valido_hasta && (
+                <div>Válida hasta: {new Date(info.valido_hasta).toLocaleDateString("es-AR")}</div>
+              )}
+            </div>
+          </div>
+        ) : showDocumentPreview ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border overflow-hidden bg-white">
+              <iframe src={previewSrc || undefined} title="Vista previa de giftcard" className="h-[68vh] w-full" />
+            </div>
             <div className="text-sm text-muted-foreground">
               {info?.numero && <div>Número: {info.numero}</div>}
               {info?.cliente && <div>Clienta: {info.cliente}</div>}
