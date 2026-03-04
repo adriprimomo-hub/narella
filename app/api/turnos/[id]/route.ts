@@ -120,6 +120,35 @@ const parseDeclaracionLinkTtlHours = () => {
 const buildDeclaracionExpiry = () =>
   new Date(Date.now() + parseDeclaracionLinkTtlHours() * 60 * 60 * 1000).toISOString()
 
+const resolveDeclaracionPlantillaId = async (db: any, tenantId: string, rawPlantillaId: unknown) => {
+  const plantillaId = String(rawPlantillaId || "").trim()
+  if (!plantillaId) {
+    return { id: null as string | null, error: null as string | null, status: 200 }
+  }
+
+  const { data: plantilla, error } = await db
+    .from("declaraciones_juradas_plantillas")
+    .select("id, activa")
+    .eq("id", plantillaId)
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingTableError(error, "declaraciones_juradas_plantillas")) {
+      return { id: null as string | null, error: null as string | null, status: 200 }
+    }
+    return { id: null as string | null, error: error.message || "No se pudo validar la declaración jurada.", status: 500 }
+  }
+  if (!plantilla) {
+    return { id: null as string | null, error: "La declaración jurada configurada en el servicio no existe.", status: 404 }
+  }
+  if (plantilla.activa === false) {
+    return { id: null as string | null, error: "La declaración jurada configurada en el servicio está inactiva.", status: 409 }
+  }
+
+  return { id: plantilla.id as string, error: null as string | null, status: 200 }
+}
+
 const ensureDeclaracionTurnoPayload = async (args: {
   db: any
   turno: any
@@ -341,7 +370,6 @@ const turnoUpdateSchema = z
     empleada_final_id: z.string().min(1).optional(),
     servicio_id: z.string().min(1).optional(),
     servicio_final_id: z.string().min(1).optional(),
-    declaracion_jurada_plantilla_id: z.string().optional().nullable(),
     estado: z.string().min(1).optional(),
     servicios_agregados: z.array(z.any()).optional(),
     productos_agregados: z.array(z.any()).optional(),
@@ -476,10 +504,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "No tienes acceso a este turno" }, { status: 403 })
     }
 
+    let servicioFinalDeclaracionId: string | null | undefined = undefined
     if (updates.servicio_final_id) {
       const { data: servicio, error: servicioError } = await db
         .from("servicios")
-        .select("id, nombre, empleadas_habilitadas")
+        .select("id, nombre, empleadas_habilitadas, declaracion_jurada_plantilla_id")
         .eq("id", updates.servicio_final_id)
         .eq("usuario_id", tenantId)
         .maybeSingle()
@@ -494,6 +523,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           { status: 409 },
         )
       }
+
+      const declaracionResult = await resolveDeclaracionPlantillaId(
+        db,
+        tenantId,
+        (servicio as any).declaracion_jurada_plantilla_id,
+      )
+      if (declaracionResult.error) {
+        return NextResponse.json({ error: declaracionResult.error }, { status: declaracionResult.status })
+      }
+      servicioFinalDeclaracionId = declaracionResult.id
     }
 
     const serviciosAgregadosNormalizados = Array.isArray(updates.servicios_agregados)
@@ -552,7 +591,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const staffPayload: Record<string, unknown> = {}
-    if (updates.servicio_final_id !== undefined) staffPayload.servicio_final_id = updates.servicio_final_id
+    if (updates.servicio_final_id !== undefined) {
+      staffPayload.servicio_final_id = updates.servicio_final_id
+      if (servicioFinalDeclaracionId !== undefined) {
+        staffPayload.declaracion_jurada_plantilla_id = servicioFinalDeclaracionId
+        if (servicioFinalDeclaracionId !== (currentTurno.declaracion_jurada_plantilla_id || null)) {
+          staffPayload.declaracion_jurada_respuesta_id = null
+        }
+      }
+    }
     if (updates.servicios_agregados !== undefined) staffPayload.servicios_agregados = serviciosAgregadosNormalizados
     if (updates.productos_agregados !== undefined) staffPayload.productos_agregados = productosAgregadosNormalizados
     Object.assign(staffPayload, fotoTrabajoUpdate.payload)
@@ -658,7 +705,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const { data: servicio, error: servicioError } = await db
     .from("servicios")
-    .select("id, nombre, empleadas_habilitadas")
+    .select("id, nombre, empleadas_habilitadas, declaracion_jurada_plantilla_id")
     .eq("id", updatedServicio)
     .eq("usuario_id", tenantId)
     .maybeSingle()
@@ -697,40 +744,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     )
   }
 
-  const declaracionPayload = (updates as any).declaracion_jurada_plantilla_id
-  let declaracionPlantillaId = currentTurno.declaracion_jurada_plantilla_id || null
-  if (declaracionPayload !== undefined) {
-    const nextDeclaracionId = String(declaracionPayload || "").trim()
-    if (!nextDeclaracionId) {
-      declaracionPlantillaId = null
-    } else {
-      const { data: plantilla, error: plantillaError } = await db
-        .from("declaraciones_juradas_plantillas")
-        .select("id, activa")
-        .eq("id", nextDeclaracionId)
-        .eq("usuario_id", tenantId)
-        .maybeSingle()
-
-      if (plantillaError) {
-        if (isMissingTableError(plantillaError, "declaraciones_juradas_plantillas")) {
-          return NextResponse.json({ error: "Falta crear la tabla de declaraciones juradas." }, { status: 500 })
-        }
-        return NextResponse.json({ error: plantillaError.message }, { status: 500 })
-      }
-      if (!plantilla) {
-        return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
-      }
-      if (plantilla.activa === false) {
-        return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
-      }
-      declaracionPlantillaId = plantilla.id
-    }
-
-    const plantillaChanged = declaracionPlantillaId !== (currentTurno.declaracion_jurada_plantilla_id || null)
-    updates.declaracion_jurada_plantilla_id = declaracionPlantillaId
-    if (plantillaChanged) {
-      updates.declaracion_jurada_respuesta_id = null
-    }
+  const declaracionResult = await resolveDeclaracionPlantillaId(
+    db,
+    tenantId,
+    (servicio as any).declaracion_jurada_plantilla_id,
+  )
+  if (declaracionResult.error) {
+    return NextResponse.json({ error: declaracionResult.error }, { status: declaracionResult.status })
+  }
+  updates.declaracion_jurada_plantilla_id = declaracionResult.id
+  if (declaracionResult.id !== (currentTurno.declaracion_jurada_plantilla_id || null)) {
+    updates.declaracion_jurada_respuesta_id = null
   }
 
   if (!skipRecursosCheck) {

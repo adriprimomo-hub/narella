@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { localAdmin } from "@/lib/localdb/admin"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
-import { emitirFactura, resolveFacturacionConfig, type FacturaItem } from "@/lib/facturacion"
+import { emitirFactura, type FacturaItem, type FacturacionConfig } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   FACTURA_REINTENTO_MINUTOS,
   buildFacturaRetryPayload,
@@ -85,15 +87,15 @@ const resolveManualActor = async () => {
   } = await db.auth.getUser()
 
   if (!user) {
-    return { userId: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
+    return { userId: null, tenantId: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
   }
 
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role) && role !== "recepcion") {
-    return { userId: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
+    return { userId: null, tenantId: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
-  return { userId: user.id, error: null as NextResponse | null }
+  return { userId: user.id, tenantId: getTenantId(user) || user.id, error: null as NextResponse | null }
 }
 
 const normalizePayloadItemsFromRow = (raw: unknown): FacturaItem[] => {
@@ -188,23 +190,35 @@ const processRetryRows = async (rows: FacturaPendienteRow[]) => {
   let invalidas = 0
   let ultimo_error: string | null = null
   const errores: Array<{ id: string; error: string }> = []
+  const tenantConfigCache = new Map<string, FacturacionConfig | null>()
   const localSequenceCache = new Map<string, number>()
 
-  const config = await resolveFacturacionConfig()
-  const configCbteTipo = Number(config?.afip_cbte_tipo || 0)
-  const configPuntoVenta = Number(config?.afip_punto_venta || 0)
-  const canSuggestLocalSequence = Number.isFinite(configCbteTipo) && configCbteTipo > 0 && Number.isFinite(configPuntoVenta) && configPuntoVenta > 0
+  const resolveTenantConfig = async (tenantId: string) => {
+    if (tenantConfigCache.has(tenantId)) {
+      return tenantConfigCache.get(tenantId) || null
+    }
+    const config = await resolveTenantFacturacionConfig(localAdmin, tenantId)
+    tenantConfigCache.set(tenantId, config)
+    return config
+  }
 
-  const resolveNumeroSugerido = async (userId: string) => {
+  const resolveNumeroSugerido = async (tenantId: string, config: FacturacionConfig | null) => {
+    const cbteTipo = Number(config?.afip_cbte_tipo || 0)
+    const puntoVenta = Number(config?.afip_punto_venta || 0)
+    const canSuggestLocalSequence =
+      Number.isFinite(cbteTipo) && cbteTipo > 0 && Number.isFinite(puntoVenta) && puntoVenta > 0
     if (!canSuggestLocalSequence) return null
-    if (localSequenceCache.has(userId)) return localSequenceCache.get(userId) || null
+
+    const cacheKey = `${tenantId}:${cbteTipo}:${puntoVenta}`
+    if (localSequenceCache.has(cacheKey)) return localSequenceCache.get(cacheKey) || null
+
     const { data, error } = await localAdmin
       .from("facturas")
       .select("numero")
-      .eq("usuario_id", userId)
+      .eq("usuario_id", tenantId)
       .eq("tipo", "factura")
-      .eq("cbte_tipo", configCbteTipo)
-      .eq("punto_venta", configPuntoVenta)
+      .eq("cbte_tipo", cbteTipo)
+      .eq("punto_venta", puntoVenta)
       .order("numero", { ascending: false })
       .limit(20)
     if (error) return null
@@ -214,7 +228,7 @@ const processRetryRows = async (rows: FacturaPendienteRow[]) => {
       return acc
     }, 0)
     const next = Number.isFinite(maxNumero) && maxNumero > 0 ? maxNumero + 1 : 1
-    localSequenceCache.set(userId, next)
+    localSequenceCache.set(cacheKey, next)
     return next
   }
 
@@ -255,7 +269,8 @@ const processRetryRows = async (rows: FacturaPendienteRow[]) => {
     }
 
     try {
-      const numeroSugerido = await resolveNumeroSugerido(row.usuario_id)
+      const tenantConfig = await resolveTenantConfig(row.usuario_id)
+      const numeroSugerido = await resolveNumeroSugerido(row.usuario_id, tenantConfig)
       const facturaResponse = await emitirFactura({
         cliente: retryPayload.cliente,
         items: retryPayload.items,
@@ -266,12 +281,17 @@ const processRetryRows = async (rows: FacturaPendienteRow[]) => {
         // En reintentos usamos fecha actual para evitar rechazos por fecha fuera de secuencia.
         fecha: new Date(),
         numero_sugerido: numeroSugerido || undefined,
+        config: tenantConfig,
       })
 
       const facturaData = facturaResponse.factura
       const numeroEmitido = Number(facturaData?.numero || 0)
       if (Number.isFinite(numeroEmitido) && numeroEmitido > 0) {
-        localSequenceCache.set(row.usuario_id, numeroEmitido + 1)
+        const cbteTipo = Number(tenantConfig?.afip_cbte_tipo || facturaData?.cbte_tipo || 0)
+        const puntoVenta = Number(tenantConfig?.afip_punto_venta || facturaData?.punto_venta || 0)
+        if (Number.isFinite(cbteTipo) && cbteTipo > 0 && Number.isFinite(puntoVenta) && puntoVenta > 0) {
+          localSequenceCache.set(`${row.usuario_id}:${cbteTipo}:${puntoVenta}`, numeroEmitido + 1)
+        }
       }
       const pdfStorage = await resolveFacturaPdfPersistence({
         userId: row.usuario_id,
@@ -398,14 +418,14 @@ const runRetryLoopCron = async (request: NextRequest) => {
 const runRetryLoopManual = async (request: NextRequest) => {
   const actor = await resolveManualActor()
   if (actor.error) return actor.error
-  if (!actor.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!actor.userId || !actor.tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const limitRaw = Number.parseInt(request.nextUrl.searchParams.get("limit") || "", 10)
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, MAX_BATCH_SIZE) : DEFAULT_BATCH_SIZE
   const facturaId = request.nextUrl.searchParams.get("factura_id")?.trim() || null
   const force = request.nextUrl.searchParams.get("force") === "1"
 
-  const pendingQuery = await fetchPendientes({ userId: actor.userId, facturaId })
+  const pendingQuery = await fetchPendientes({ userId: actor.tenantId, facturaId })
   if (pendingQuery.error) {
     return NextResponse.json({ error: pendingQuery.error }, { status: 500 })
   }
@@ -422,7 +442,7 @@ const runRetryLoopManual = async (request: NextRequest) => {
 
   const result = await processRetryRows(rows)
 
-  const statusQuery = await fetchPendientes({ userId: actor.userId })
+  const statusQuery = await fetchPendientes({ userId: actor.tenantId })
   if (statusQuery.error) {
     return NextResponse.json({ error: statusQuery.error }, { status: 500 })
   }
@@ -472,8 +492,8 @@ export async function GET(request: NextRequest) {
 
     const actor = await resolveManualActor()
     if (actor.error) return actor.error
-    if (!actor.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const pendingQuery = await fetchPendientes({ userId: actor.userId })
+    if (!actor.userId || !actor.tenantId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const pendingQuery = await fetchPendientes({ userId: actor.tenantId })
     if (pendingQuery.error) {
       return NextResponse.json({ error: pendingQuery.error }, { status: 500 })
     }

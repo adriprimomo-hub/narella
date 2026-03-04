@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { emitirFactura, type FacturaItem } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   buildFacturaRetryPayload,
   guardarFacturaEmitida,
@@ -67,6 +69,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const clienteId = url.searchParams.get("cliente_id")
@@ -87,7 +90,7 @@ export async function GET(request: Request) {
       clientes:cliente_id (id, nombre, apellido)
     `,
     )
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (clienteId) query = query.eq("cliente_id", clienteId)
   if (!queryText && limit && !page) query = query.limit(limit)
@@ -172,6 +175,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, giftcardSchema)
   if (validationResponse) return validationResponse
@@ -186,7 +190,7 @@ export async function POST(request: Request) {
     .from("servicios")
     .select("id, nombre, precio, precio_lista")
     .in("id", servicioIds)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const montoServicios = computeMontoServicios(servicios || [], servicioIds)
   const montoTotal = Number.isFinite(Number(payload.monto_total)) ? Number(payload.monto_total) : montoServicios
@@ -197,7 +201,7 @@ export async function POST(request: Request) {
   const { data: existentes } = await db
     .from("giftcards")
     .select("numero")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const numero = buildNumero((existentes || []).map((g: any) => String(g.numero || "")))
   const ahora = new Date()
@@ -209,7 +213,7 @@ export async function POST(request: Request) {
     .from("giftcards")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         numero,
         cliente_id: payload.cliente_id,
         servicio_ids: servicioIds,
@@ -238,7 +242,7 @@ export async function POST(request: Request) {
 
   await db.from("caja_movimientos").insert([
     {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       creado_por_username: username,
       medio_pago: payload.metodo_pago,
       tipo: "ingreso",
@@ -261,7 +265,7 @@ export async function POST(request: Request) {
         .from("clientes")
         .select("nombre, apellido")
         .eq("id", payload.cliente_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
 
       const facturaItems: FacturaItem[] = [
@@ -284,13 +288,15 @@ export async function POST(request: Request) {
         total: montoTotal,
         metodo_pago: payload.metodo_pago,
       })
+      const facturacionConfig = await resolveTenantFacturacionConfig(db, tenantId)
 
       facturaResponse = await emitirFactura({
         cliente: clienteFactura,
         items: facturaItems,
         total: montoTotal,
         metodo_pago: payload.metodo_pago,
-        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: user.id })) || undefined,
+        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: tenantId })) || undefined,
+        config: facturacionConfig,
       })
     } catch (error: any) {
       facturaError = error?.message || "No se pudo emitir la factura"
@@ -300,7 +306,8 @@ export async function POST(request: Request) {
   if (facturaResponse?.factura) {
     const saved = await guardarFacturaEmitida({
       db,
-      userId: user.id,
+      userId: tenantId,
+      actorUserId: user.id,
       username,
       origenTipo: "giftcard",
       origenId: giftcard.id,
@@ -318,7 +325,7 @@ export async function POST(request: Request) {
       .from("giftcards")
       .update({ facturado: true, updated_at: new Date().toISOString() })
       .eq("id", giftcard.id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
   } else if (payload.facturar && facturaError) {
     if (!facturaRetryPayload) {
       const fallbackItems: FacturaItem[] = [
@@ -340,7 +347,8 @@ export async function POST(request: Request) {
     if (facturaRetryPayload) {
       const pending = await guardarFacturaPendiente({
         db,
-        userId: user.id,
+        userId: tenantId,
+        actorUserId: user.id,
         username,
         origenTipo: "giftcard",
         origenId: giftcard.id,
@@ -366,3 +374,5 @@ export async function POST(request: Request) {
     factura_error: facturaError,
   })
 }
+
+

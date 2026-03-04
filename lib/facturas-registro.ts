@@ -221,6 +221,7 @@ export async function sugerirNumeroFacturaLocal(args: { db: DbClient; userId: st
 export async function guardarFacturaEmitida(args: {
   db: DbClient
   userId: string
+  actorUserId?: string
   username: string
   origenTipo: string
   origenId: string
@@ -268,7 +269,7 @@ export async function guardarFacturaEmitida(args: {
     retry_ultimo_error: null,
     retry_ultimo_intento: null,
     retry_proximo_intento: null,
-    creado_por: args.userId,
+    creado_por: args.actorUserId || args.userId,
     creado_por_username: args.username,
   }
 
@@ -309,6 +310,7 @@ export async function guardarFacturaEmitida(args: {
 export async function guardarFacturaPendiente(args: {
   db: DbClient
   userId: string
+  actorUserId?: string
   username: string
   origenTipo: string
   origenId: string
@@ -341,7 +343,7 @@ export async function guardarFacturaPendiente(args: {
         retry_ultimo_error: String(args.errorMessage || "No se pudo emitir en ARCA"),
         retry_ultimo_intento: nowIso,
         retry_proximo_intento: nextRetryAt,
-        creado_por: args.userId,
+        creado_por: args.actorUserId || args.userId,
         creado_por_username: args.username,
       },
     ])

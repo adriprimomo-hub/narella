@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { emitirFactura, type FacturaItem } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   buildFacturaRetryPayload,
   guardarFacturaEmitida,
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
@@ -42,7 +45,7 @@ export async function GET(request: Request) {
     db
       .from("producto_movimientos")
       .select("*, productos:producto_id(nombre), clientes:cliente_id(nombre, apellido), empleadas:empleada_id(nombre, apellido)")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .order("created_at", { ascending: false })
 
   if (pagination.enabled) {
@@ -87,6 +90,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -119,7 +123,7 @@ export async function POST(request: Request) {
         .from("productos")
         .select("precio_lista, precio_descuento, nombre")
         .eq("id", producto_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       safePrecio = Number(producto?.precio_descuento ?? producto?.precio_lista ?? 0)
       productoNombre = producto?.nombre || ""
@@ -133,7 +137,7 @@ export async function POST(request: Request) {
       .from("productos")
       .select("nombre")
       .eq("id", producto_id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     productoNombre = producto?.nombre || ""
   }
@@ -142,7 +146,7 @@ export async function POST(request: Request) {
     .from("producto_movimientos")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         producto_id,
         tipo,
@@ -168,10 +172,10 @@ export async function POST(request: Request) {
       .from("productos")
       .select("stock_actual")
       .eq("id", producto_id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     const nuevoStock = Number(current?.stock_actual || 0) + signo * Number(cantidad)
-    await db.from("productos").update({ stock_actual: nuevoStock }).eq("id", producto_id).eq("usuario_id", user.id)
+    await db.from("productos").update({ stock_actual: nuevoStock }).eq("id", producto_id).eq("usuario_id", tenantId)
   }
 
   let facturaResponse = null
@@ -182,7 +186,7 @@ export async function POST(request: Request) {
   if (facturar && tipo === "venta") {
     try {
       const { data: clienteData } = cliente_id
-        ? await db.from("clientes").select("nombre, apellido").eq("id", cliente_id).eq("usuario_id", user.id).single()
+        ? await db.from("clientes").select("nombre, apellido").eq("id", cliente_id).eq("usuario_id", tenantId).single()
         : { data: null }
       const total = Number(safePrecio || 0) * Number(cantidad || 0)
       const facturaItems: FacturaItem[] = [
@@ -204,12 +208,14 @@ export async function POST(request: Request) {
         total,
         metodo_pago: metodo_pago || "efectivo",
       })
+      const facturacionConfig = await resolveTenantFacturacionConfig(db, tenantId)
       facturaResponse = await emitirFactura({
         cliente: clienteFactura,
         items: facturaItems,
         total,
         metodo_pago: metodo_pago || "efectivo",
-        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: user.id })) || undefined,
+        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: tenantId })) || undefined,
+        config: facturacionConfig,
       })
     } catch (error: any) {
       facturaError = error?.message || "No se pudo emitir la factura"
@@ -219,7 +225,8 @@ export async function POST(request: Request) {
   if (facturaResponse?.factura) {
     const saved = await guardarFacturaEmitida({
       db,
-      userId: user.id,
+      userId: tenantId,
+      actorUserId: user.id,
       username,
       origenTipo: "producto_venta",
       origenId: mov.id,
@@ -256,7 +263,8 @@ export async function POST(request: Request) {
     if (facturaRetryPayload) {
       const pending = await guardarFacturaPendiente({
         db,
-        userId: user.id,
+        userId: tenantId,
+        actorUserId: user.id,
         username,
         origenTipo: "producto_venta",
         origenId: mov.id,
@@ -282,3 +290,5 @@ export async function POST(request: Request) {
     factura_error: facturaError,
   })
 }
+
+

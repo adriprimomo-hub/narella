@@ -59,7 +59,7 @@ const buildReminderMessage = (
   params: { clienta: string; cantidadDias: number; servicioVencido: string },
   templateOverride?: string | null,
 ) => {
-  const template = normalizeTemplate(templateOverride || process.env.WA_ME_SERVICIO_VENCIDO_TEMPLATE)
+  const template = normalizeTemplate(templateOverride)
   const values: Record<string, string> = {
     clienta: params.clienta,
     cliente: params.clienta,

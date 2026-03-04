@@ -35,6 +35,8 @@ const resolveComisionTipo = (pct?: number | null, fijo?: number | null): Comisio
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
+type DeclaracionPlantilla = { id: string; nombre: string; activa?: boolean | null }
+
 interface ServicioFormProps {
   servicio?: Servicio | null
   onSuccess: () => void
@@ -52,6 +54,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
     empleadas_habilitadas: [] as string[],
     comision_pct: "" as number | "",
     comision_monto_fijo: "" as number | "",
+    declaracion_jurada_plantilla_id: "" as string,
   })
   const [loading, setLoading] = useState(false)
   const [showCategoriasManager, setShowCategoriasManager] = useState(false)
@@ -64,10 +67,12 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
   const { data: empleadasData } = useSWR<{ id: string; nombre: string }[]>("/api/empleadas", fetcher)
   const { data: categoriasData, mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   const { data: recursosData, mutate: mutateRecursos } = useSWR<Recurso[]>("/api/recursos", fetcher)
+  const { data: declaracionesData } = useSWR<DeclaracionPlantilla[]>("/api/declaraciones-juradas/plantillas", fetcher)
 
   const empleadas = Array.isArray(empleadasData) ? empleadasData : []
   const categorias = Array.isArray(categoriasData) ? categoriasData : []
   const recursos = Array.isArray(recursosData) ? recursosData : []
+  const declaraciones = Array.isArray(declaracionesData) ? declaracionesData : []
 
   useEffect(() => {
     if (servicio) {
@@ -85,6 +90,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
         empleadas_habilitadas: servicio.empleadas_habilitadas || [],
         comision_pct: basePct,
         comision_monto_fijo: baseFijo,
+        declaracion_jurada_plantilla_id: (servicio as any).declaracion_jurada_plantilla_id || "",
       })
       setComisionTipoBase(baseTipo)
       const comisiones = (servicio as any).empleadas_comision || []
@@ -108,6 +114,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
         empleadas_habilitadas: [],
         comision_pct: "",
         comision_monto_fijo: "",
+        declaracion_jurada_plantilla_id: "",
       })
       setComisionTipoBase("porcentaje")
       setEmpleadasComision([])
@@ -169,6 +176,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
           categoria_id: formData.categoria_id || null,
           recurso_id: formData.recurso_id || null,
           empleadas_habilitadas: formData.empleadas_habilitadas,
+          declaracion_jurada_plantilla_id: formData.declaracion_jurada_plantilla_id || null,
           ...comisionBase,
           empleadas_comision: comisionesPayload,
         }),
@@ -269,6 +277,31 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
               {categorias.map((cat) => (
                 <SelectItem key={cat.id} value={cat.id}>
                   {cat.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">Declaración jurada</p>
+          <Select
+            value={formData.declaracion_jurada_plantilla_id || "none"}
+            onValueChange={(v) =>
+              setFormData({
+                ...formData,
+                declaracion_jurada_plantilla_id: v === "none" ? "" : v,
+              })
+            }
+          >
+            <SelectTrigger className="h-10">
+              <SelectValue placeholder="Sin declaración jurada" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin declaración jurada</SelectItem>
+              {declaraciones.map((plantilla) => (
+                <SelectItem key={plantilla.id} value={plantilla.id}>
+                  {plantilla.nombre}
+                  {plantilla.activa === false ? " (inactiva)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>

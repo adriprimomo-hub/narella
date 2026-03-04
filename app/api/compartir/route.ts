@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { randomUUID } from "crypto"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { validateBody } from "@/lib/api/validation"
 import { resolveAppUrl } from "@/lib/url"
 import { buildLiquidacionPDF } from "@/lib/pdf"
@@ -104,6 +105,7 @@ export async function POST(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, shareSchema)
   if (validationResponse) return validationResponse
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
         .from("facturas")
         .select(select)
         .eq("id", payload.id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
     }
 
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
         .from("giftcards")
         .select(select)
         .eq("id", payload.id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
     }
 
@@ -196,7 +198,7 @@ export async function POST(request: Request) {
     if (isSupabaseStorageConfigured()) {
       try {
         const uploaded = await uploadShareBinaryToStorage({
-          usuarioId: user.id,
+          usuarioId: tenantId,
           token,
           filename,
           mimeType,
@@ -207,6 +209,7 @@ export async function POST(request: Request) {
       } catch (error: any) {
         console.warn("[compartir] No se pudo subir liquidación a Storage, se usa base64", {
           userId: user.id,
+          tenantId,
           error: error?.message || "Error desconocido",
         })
         dataBase64 = buffer.toString("base64")
@@ -217,7 +220,7 @@ export async function POST(request: Request) {
   }
 
   const insertPayload: Record<string, unknown> = {
-    usuario_id: user.id,
+    usuario_id: tenantId,
     token,
     tipo: payload.tipo,
     resource_id: resourceId,

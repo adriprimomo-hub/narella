@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/localdb/server"
 import { normalizeDeclaracionCampos, validateDeclaracionRespuestas } from "@/lib/declaraciones-juradas"
+import { buildDeclaracionJuradaPdf } from "@/lib/declaraciones-juradas-pdf"
 import { validateBody } from "@/lib/api/validation"
 
 const submitSchema = z.object({
@@ -25,6 +26,15 @@ const isExpired = (value?: string | null) => {
   return date.getTime() < Date.now()
 }
 
+const isMissingColumnError = (error: any, column: string) => {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  const col = String(column || "").toLowerCase()
+  if (!col) return false
+  if (code === "42703" || code === "PGRST204") return message.includes(col)
+  return message.includes("column") && message.includes(col)
+}
+
 type RouteContext = { params: Promise<{ token: string }> }
 
 export async function GET(request: Request, { params }: RouteContext) {
@@ -35,7 +45,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   const { data: respuesta, error } = await db
     .from("declaraciones_juradas_respuestas")
-    .select("*")
+    .select("id, token, estado, turno_id, plantilla_id, respuestas, firma_data_url, submitted_at, link_expires_at, pdf_filename")
     .eq("token", tokenValue)
     .maybeSingle()
 
@@ -90,6 +100,8 @@ export async function GET(request: Request, { params }: RouteContext) {
     },
     respuestas: respuesta.respuestas || {},
     firma_data_url: respuesta.firma_data_url || null,
+    pdf_disponible: Boolean(respuesta.pdf_filename),
+    pdf_filename: respuesta.pdf_filename || null,
     submitted_at: respuesta.submitted_at || null,
   })
 }
@@ -105,7 +117,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const { data: respuesta, error } = await db
     .from("declaraciones_juradas_respuestas")
-    .select("*")
+    .select("id, estado, link_expires_at, plantilla_id, turno_id, usuario_id")
     .eq("token", tokenValue)
     .maybeSingle()
 
@@ -127,7 +139,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const { data: plantilla, error: plantillaError } = await db
     .from("declaraciones_juradas_plantillas")
-    .select("id, campos, requiere_firma")
+    .select("id, nombre, texto_intro, campos, requiere_firma")
     .eq("id", respuesta.plantilla_id)
     .maybeSingle()
 
@@ -150,10 +162,32 @@ export async function POST(request: Request, { params }: RouteContext) {
   }
 
   const nowIso = new Date().toISOString()
+  const { data: turnoMeta } = await db
+    .from("turnos")
+    .select("id, fecha_inicio, clientes:cliente_id(nombre, apellido), servicio_final:servicio_final_id(nombre), servicios:servicio_id(nombre)")
+    .eq("id", respuesta.turno_id)
+    .maybeSingle()
+  const clienteNombre = `${turnoMeta?.clientes?.nombre || ""} ${turnoMeta?.clientes?.apellido || ""}`.trim()
+  const servicioNombre = turnoMeta?.servicio_final?.nombre || turnoMeta?.servicios?.nombre || ""
+  const pdf = buildDeclaracionJuradaPdf({
+    plantillaNombre: String(plantilla.nombre || "Declaracion jurada"),
+    textoIntro: plantilla.texto_intro || null,
+    campos,
+    respuestas: validation.respuestas,
+    firmaDataUrl: firmaDataUrl || null,
+    clienteNombre,
+    servicioNombre,
+    fechaTurno: turnoMeta?.fecha_inicio || null,
+    submittedAt: nowIso,
+  })
+
   const updatePayload = {
     estado: "completada",
     respuestas: validation.respuestas,
     firma_data_url: firmaDataUrl || null,
+    pdf_base64: pdf.pdf_base64,
+    pdf_filename: pdf.pdf_filename,
+    pdf_generated_at: nowIso,
     submitted_at: nowIso,
     ip_address: extractIpAddress(request),
     user_agent: request.headers.get("user-agent") || null,
@@ -166,7 +200,27 @@ export async function POST(request: Request, { params }: RouteContext) {
     .eq("id", respuesta.id)
     .eq("estado", "pendiente")
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) {
+    if (isMissingColumnError(updateError, "pdf_base64")) {
+      const legacyPayload = {
+        estado: "completada",
+        respuestas: validation.respuestas,
+        firma_data_url: firmaDataUrl || null,
+        submitted_at: nowIso,
+        ip_address: extractIpAddress(request),
+        user_agent: request.headers.get("user-agent") || null,
+        updated_at: nowIso,
+      }
+      const { error: legacyError } = await db
+        .from("declaraciones_juradas_respuestas")
+        .update(legacyPayload)
+        .eq("id", respuesta.id)
+        .eq("estado", "pendiente")
+      if (legacyError) return NextResponse.json({ error: legacyError.message }, { status: 500 })
+    } else {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+  }
 
   await db
     .from("turnos")

@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { emitirFactura, type FacturaItem } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   buildFacturaRetryPayload,
   guardarFacturaEmitida,
@@ -31,6 +33,7 @@ export async function GET(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const clienteId = url.searchParams.get("cliente_id")
@@ -50,7 +53,7 @@ export async function GET(request: Request) {
       servicios:servicio_id (id, nombre)
     `,
     )
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (clienteId) query = query.eq("cliente_id", clienteId)
   if (estado) query = query.eq("estado", estado)
@@ -94,6 +97,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, senaSchema)
   if (validationResponse) return validationResponse
@@ -111,7 +115,7 @@ export async function POST(request: Request) {
     .from("senas")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         cliente_id: clienteId,
         servicio_id: servicioId,
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
 
   await db.from("caja_movimientos").insert([
     {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       creado_por_username: username,
       medio_pago: metodoPago,
       tipo: "ingreso",
@@ -159,13 +163,13 @@ export async function POST(request: Request) {
         .from("clientes")
         .select("nombre, apellido")
         .eq("id", clienteId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const { data: servicioData } = await db
         .from("servicios")
         .select("nombre")
         .eq("id", servicioId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const facturaItems: FacturaItem[] = [
         {
@@ -186,12 +190,14 @@ export async function POST(request: Request) {
         total: monto,
         metodo_pago: metodoPago,
       })
+      const facturacionConfig = await resolveTenantFacturacionConfig(db, tenantId)
       facturaResponse = await emitirFactura({
         cliente: clienteFactura,
         items: facturaItems,
         total: monto,
         metodo_pago: metodoPago,
-        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: user.id })) || undefined,
+        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: tenantId })) || undefined,
+        config: facturacionConfig,
       })
     } catch (error: any) {
       facturaError = error?.message || "No se pudo emitir la factura"
@@ -201,7 +207,8 @@ export async function POST(request: Request) {
   if (facturaResponse?.factura) {
     const saved = await guardarFacturaEmitida({
       db,
-      userId: user.id,
+      userId: tenantId,
+      actorUserId: user.id,
       username,
       origenTipo: "sena_registro",
       origenId: data.id,
@@ -235,7 +242,8 @@ export async function POST(request: Request) {
     if (facturaRetryPayload) {
       const pending = await guardarFacturaPendiente({
         db,
-        userId: user.id,
+        userId: tenantId,
+        actorUserId: user.id,
         username,
         origenTipo: "sena_registro",
         origenId: data.id,

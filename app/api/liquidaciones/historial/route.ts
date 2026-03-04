@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const role = await getUserRole(db, user.id)
     if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const tenantId = getTenantId(user) || user.id
 
     const url = new URL(request.url)
     const empleadaId = url.searchParams.get("empleada_id")?.trim() || ""
@@ -29,7 +31,7 @@ export async function GET(request: Request) {
       .select(
         "id, created_at, desde, hasta, empleada_id, empleada_nombre, empleada_apellido, items, total_comision, total_adelantos, total_neto",
       )
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(limit)
 
@@ -65,4 +67,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No se pudo obtener el historial de liquidaciones." }, { status: 500 })
   }
 }
-

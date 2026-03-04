@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
@@ -162,6 +163,7 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const role = await getUserRole(db, user.id)
     if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const tenantId = getTenantId(user) || user.id
 
     const url = new URL(request.url)
     const empleadaId = url.searchParams.get("empleada_id")
@@ -188,7 +190,7 @@ export async function GET(request: Request) {
         .from("empleadas")
         .select("id, nombre, apellido")
         .eq("id", empleadaId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       if (empleadaError) {
         return NextResponse.json({ error: "Empleada no encontrada" }, { status: 404 })
@@ -200,7 +202,7 @@ export async function GET(request: Request) {
     const { data: pagos, error: pagosError } = await db
       .from("pagos")
       .select("fecha_pago, turno_id")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .gte("fecha_pago", start.toISOString())
       .lt("fecha_pago", endExclusive.toISOString())
 
@@ -216,7 +218,7 @@ export async function GET(request: Request) {
     const { data: overrides, error: overridesError } = await db
       .from("servicio_empleada_comisiones")
       .select("servicio_id, empleada_id, comision_pct, comision_monto_fijo")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
 
     let overridesList = (overrides ?? []) as OverrideRow[]
     if (overridesError) {
@@ -230,7 +232,7 @@ export async function GET(request: Request) {
     const { data: adelantos, error: adelantosError } = await db
       .from("adelantos")
       .select("monto, empleada_id, fecha_entrega")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .gte("fecha_entrega", start.toISOString())
       .lt("fecha_entrega", endExclusive.toISOString())
 
@@ -247,7 +249,7 @@ export async function GET(request: Request) {
     const { data: pagosGrupos, error: pagosGruposError } = await db
       .from("pagos_grupos")
       .select("id, fecha_pago, metodo_pago")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .gte("fecha_pago", start.toISOString())
       .lt("fecha_pago", endExclusive.toISOString())
 
@@ -273,7 +275,7 @@ export async function GET(request: Request) {
       const { data: itemsGrupo, error: itemsGrupoError } = await db
         .from("pago_grupo_items")
         .select("turno_id, pago_grupo_id")
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .in("pago_grupo_id", pagosGruposList.map((p: any) => p.id))
 
       let itemsGrupoList = (itemsGrupo ?? []) as PagoGrupoItemRow[]
@@ -301,7 +303,7 @@ export async function GET(request: Request) {
       const { data: turnosData, error: turnosError } = await db
         .from("turnos")
         .select("id, empleada_id, empleada_final_id, servicio_id, servicio_final_id, servicios_agregados")
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .in("id", turnosIds)
 
       if (turnosError) {
@@ -326,7 +328,7 @@ export async function GET(request: Request) {
       const { data: serviciosData, error: serviciosError } = await db
         .from("servicios")
         .select("id, nombre, precio, precio_lista, precio_descuento, comision_pct, comision_monto_fijo")
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .in("id", Array.from(servicioIds))
 
       if (serviciosError) {
@@ -342,7 +344,7 @@ export async function GET(request: Request) {
     const { data: overridesProductos, error: overridesProductosError } = await db
       .from("producto_empleada_comisiones")
       .select("producto_id, empleada_id, comision_pct, comision_monto_fijo")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
 
     if (overridesProductosError && overridesProductosError.code !== "42P01") {
       return NextResponse.json({ error: overridesProductosError.message }, { status: 500 })
@@ -363,7 +365,7 @@ export async function GET(request: Request) {
         productos:producto_id (id, nombre, precio_lista, precio_descuento, comision_pct, comision_monto_fijo)
       `,
       )
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .eq("tipo", "venta")
       .gte("created_at", start.toISOString())
       .lt("created_at", endExclusive.toISOString())
@@ -550,6 +552,7 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const role = await getUserRole(db, user.id)
     if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const tenantId = getTenantId(user) || user.id
 
     const payload = await request.json().catch(() => null)
     const empleadaId = String(payload?.empleada_id || "").trim()
@@ -581,7 +584,7 @@ export async function POST(request: Request) {
     }
 
     const insertPayload = {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       empleada_id: liquidacion.empleada.id,
       empleada_nombre: liquidacion.empleada.nombre || "Sin asignar",
       empleada_apellido: liquidacion.empleada.apellido || null,

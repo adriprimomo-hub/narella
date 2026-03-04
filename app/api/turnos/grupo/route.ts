@@ -37,7 +37,6 @@ type GrupoItem = {
 const grupoSchema = z.object({
   cliente_id: z.string().min(1),
   fecha_inicio: z.string().min(1),
-  declaracion_jurada_plantilla_id: z.string().optional().nullable(),
   turnos: z
     .array(
       z.object({
@@ -64,7 +63,6 @@ export async function POST(request: Request) {
   if (validationResponse) return validationResponse
   const cliente_id: string = payload.cliente_id
   const fecha_inicio: string = payload.fecha_inicio
-  const declaracion_jurada_plantilla_id: string | null = payload.declaracion_jurada_plantilla_id || null
   const items: GrupoItem[] = payload.turnos
 
   const fechaInicioDate = new Date(fecha_inicio)
@@ -96,29 +94,10 @@ export async function POST(request: Request) {
     }
   }
 
-  let declaracionPlantillaId: string | null = null
-  if (declaracion_jurada_plantilla_id) {
-    const { data: plantilla, error: plantillaError } = await db
-      .from("declaraciones_juradas_plantillas")
-      .select("id, activa")
-      .eq("id", declaracion_jurada_plantilla_id)
-      .eq("usuario_id", tenantId)
-      .maybeSingle()
-
-    if (plantillaError) return NextResponse.json({ error: plantillaError.message }, { status: 500 })
-    if (!plantilla) {
-      return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
-    }
-    if (plantilla.activa === false) {
-      return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
-    }
-    declaracionPlantillaId = plantilla.id
-  }
-
   const servicioIds = Array.from(new Set(items.map((item) => item.servicio_id).filter(Boolean)))
   const { data: servicios, error: serviciosError } = await db
     .from("servicios")
-    .select("id, nombre, empleadas_habilitadas")
+    .select("id, nombre, empleadas_habilitadas, declaracion_jurada_plantilla_id")
     .eq("usuario_id", tenantId)
     .in("id", servicioIds)
 
@@ -127,6 +106,25 @@ export async function POST(request: Request) {
   }
 
   const serviciosMap = new Map<string, any>((servicios || []).map((srv: any) => [srv.id, srv]))
+  const plantillaIds = Array.from(
+    new Set(
+      (servicios || [])
+        .map((srv: any) => String(srv?.declaracion_jurada_plantilla_id || "").trim())
+        .filter(Boolean),
+    ),
+  )
+  const plantillasMap = new Map<string, any>()
+  if (plantillaIds.length > 0) {
+    const { data: plantillas, error: plantillasError } = await db
+      .from("declaraciones_juradas_plantillas")
+      .select("id, activa")
+      .eq("usuario_id", tenantId)
+      .in("id", plantillaIds)
+    if (plantillasError) return NextResponse.json({ error: plantillasError.message }, { status: 500 })
+    ;(plantillas || []).forEach((item: any) => {
+      plantillasMap.set(item.id, item)
+    })
+  }
 
   const { data: configLocal } = await db.from("configuracion").select("horario_local").eq("usuario_id", tenantId).maybeSingle()
 
@@ -166,6 +164,16 @@ export async function POST(request: Request) {
 
     if (!estaDentroDeHorario((configLocal as any)?.horario_local || [], fechaInicioDate, duracion)) {
       return NextResponse.json({ error: "El turno esta fuera del horario del local" }, { status: 409 })
+    }
+    const declaracionPlantillaId = String(servicio?.declaracion_jurada_plantilla_id || "").trim()
+    if (declaracionPlantillaId) {
+      const plantilla = plantillasMap.get(declaracionPlantillaId)
+      if (!plantilla) {
+        return NextResponse.json({ error: "Una declaración jurada configurada en servicio no existe." }, { status: 404 })
+      }
+      if (plantilla.activa === false) {
+        return NextResponse.json({ error: "Una declaración jurada configurada en servicio está inactiva." }, { status: 409 })
+      }
     }
 
     const { data: overlapping, error: overlapError } = await db
@@ -224,7 +232,7 @@ export async function POST(request: Request) {
       duracion_minutos: duracion,
       estado: "pendiente",
       observaciones: item.observaciones ?? null,
-      declaracion_jurada_plantilla_id: declaracionPlantillaId,
+      declaracion_jurada_plantilla_id: String(serviciosMap.get(item.servicio_id)?.declaracion_jurada_plantilla_id || "").trim() || null,
       creado_por: user.id,
     }
   })

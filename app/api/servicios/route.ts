@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
@@ -25,6 +26,7 @@ const servicioSchema = z.object({
   comision_monto_fijo: z.coerce.number().nonnegative().optional().nullable(),
   categoria_id: z.string().optional().nullable(),
   recurso_id: z.string().optional().nullable(),
+  declaracion_jurada_plantilla_id: z.string().optional().nullable(),
 })
 
 const resolveCategoriaValue = async (
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -59,7 +62,7 @@ export async function GET(request: Request) {
   const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
 
   const createServiciosQuery = () => {
-    let query = db.from("servicios").select("*").eq("usuario_id", user.id)
+    let query = db.from("servicios").select("*").eq("usuario_id", tenantId)
     if (!includeInactive) {
       query = query.eq("activo", true)
     }
@@ -101,7 +104,7 @@ export async function GET(request: Request) {
   const { data: comisiones } = await db
     .from("servicio_empleada_comisiones")
     .select("*")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const serviciosConComision = servicios.map((srv: any) => ({
     ...srv,
@@ -125,6 +128,7 @@ export async function POST(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -142,15 +146,35 @@ export async function POST(request: Request) {
     comision_monto_fijo,
     categoria_id,
     recurso_id,
+    declaracion_jurada_plantilla_id,
   } = payload
 
-  const categoriaValue = await resolveCategoriaValue(db, user.id, categoria_id)
+  const categoriaValue = await resolveCategoriaValue(db, tenantId, categoria_id)
+
+  let declaracionPlantillaId: string | null = null
+  if (declaracion_jurada_plantilla_id) {
+    const { data: plantilla, error: plantillaError } = await db
+      .from("declaraciones_juradas_plantillas")
+      .select("id, activa")
+      .eq("id", declaracion_jurada_plantilla_id)
+      .eq("usuario_id", tenantId)
+      .maybeSingle()
+
+    if (plantillaError) return NextResponse.json({ error: plantillaError.message }, { status: 500 })
+    if (!plantilla) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
+    }
+    if (plantilla.activa === false) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
+    }
+    declaracionPlantillaId = plantilla.id
+  }
 
   const { data, error } = await db
     .from("servicios")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         nombre,
         duracion_minutos,
         precio: precio_lista,
@@ -163,6 +187,7 @@ export async function POST(request: Request) {
         categoria: categoriaValue,
         categoria_id: categoria_id || null,
         recurso_id: recurso_id || null,
+        declaracion_jurada_plantilla_id: declaracionPlantillaId,
       },
     ])
     .select()
@@ -174,7 +199,7 @@ export async function POST(request: Request) {
     const payload = empleadas_comision
       .filter((e: any) => e.empleada_id)
       .map((e: any) => ({
-        usuario_id: user.id,
+        usuario_id: tenantId,
         servicio_id: servicioId,
         empleada_id: e.empleada_id,
         comision_pct: e.comision_pct ?? null,

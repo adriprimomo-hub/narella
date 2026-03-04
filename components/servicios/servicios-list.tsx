@@ -39,7 +39,10 @@ export type Servicio = {
   empleadas_comision?: { empleada_id: string; comision_pct: number | null; comision_monto_fijo: number | null }[]
   comision_pct?: number | null
   comision_monto_fijo?: number | null
+  declaracion_jurada_plantilla_id?: string | null
 }
+
+type DeclaracionPlantilla = { id: string; nombre: string; activa?: boolean | null }
 
 type ServiciosPageResponse = {
   items: Servicio[]
@@ -59,6 +62,10 @@ export function ServiciosList() {
   )
   const { data: categorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   const { data: recursos } = useSWR<Recurso[]>("/api/recursos", fetcher)
+  const { data: declaracionesPlantillas = [] } = useSWR<DeclaracionPlantilla[]>(
+    "/api/declaraciones-juradas/plantillas",
+    fetcher,
+  )
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
   const isAdmin = config?.rol === "admin"
   const [selected, setSelected] = useState<Servicio | null>(null)
@@ -92,6 +99,12 @@ export function ServiciosList() {
     if (!recurso) return "-"
     const cantidad = Number(recurso.cantidad_disponible)
     return `${recurso.nombre}${Number.isFinite(cantidad) ? ` (${cantidad})` : ""}`
+  }
+
+  const getDeclaracionNombre = (plantillaId?: string | null) => {
+    if (!plantillaId) return "Sin DJ"
+    const found = declaracionesPlantillas.find((item) => item.id === plantillaId)
+    return found?.nombre || "DJ no disponible"
   }
 
   const handleDelete = async (id: string) => {
@@ -156,6 +169,7 @@ export function ServiciosList() {
                   <TableHead>Nombre</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Recurso</TableHead>
+                  <TableHead>DJ</TableHead>
                   <TableHead className="text-right">Duración</TableHead>
                   <TableHead className="text-right">Precio lista</TableHead>
                   <TableHead className="text-right">Precio desc.</TableHead>
@@ -178,6 +192,7 @@ export function ServiciosList() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{getCategoriaNombre(servicio.categoria_id)}</TableCell>
                       <TableCell className="text-muted-foreground">{getRecursoNombre(servicio.recurso_id)}</TableCell>
+                      <TableCell className="text-muted-foreground">{getDeclaracionNombre(servicio.declaracion_jurada_plantilla_id)}</TableCell>
                       <TableCell className="text-right">{servicio.duracion_minutos} min</TableCell>
                       <TableCell className="text-right">{formatCurrency(servicio.precio_lista)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">
@@ -219,7 +234,7 @@ export function ServiciosList() {
                   ))}
                 {servicios.filter((s) => s.nombre.toLowerCase().includes(search.toLowerCase())).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 6} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={isAdmin ? 9 : 7} className="text-sm text-muted-foreground">
                       Sin servicios para esta página.
                     </TableCell>
                   </TableRow>

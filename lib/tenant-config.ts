@@ -119,7 +119,7 @@ export const resolveTenantMensajeriaTemplates = async (
 
   return {
     confirmaciones: normalizeTemplate(
-      data?.wa_template_confirmaciones || process.env.TWILIO_WHATSAPP_TEMPLATE_CONFIRMATION,
+      data?.wa_template_confirmaciones,
       DEFAULT_CONFIRMACIONES_TEMPLATE,
     ),
     facturas_giftcards: normalizeTemplate(
@@ -128,7 +128,7 @@ export const resolveTenantMensajeriaTemplates = async (
     ),
     liquidaciones: normalizeTemplate(data?.wa_template_liquidaciones, DEFAULT_LIQUIDACIONES_TEMPLATE),
     servicios_vencidos: normalizeTemplate(
-      data?.wa_template_servicios_vencidos || process.env.WA_ME_SERVICIO_VENCIDO_TEMPLATE,
+      data?.wa_template_servicios_vencidos,
       DEFAULT_SERVICIOS_VENCIDOS_TEMPLATE,
     ),
     declaraciones_juradas: normalizeTemplate(

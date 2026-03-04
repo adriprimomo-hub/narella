@@ -82,6 +82,7 @@ type EmitirFacturaArgs = {
   ajustes?: FacturaAjuste[]
   fecha?: Date
   numero_sugerido?: number
+  config?: FacturacionConfig | null
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100
@@ -1343,8 +1344,9 @@ export async function emitirFactura({
   ajustes = [],
   fecha = new Date(),
   numero_sugerido,
+  config: configOverride,
 }: EmitirFacturaArgs): Promise<FacturaResponse> {
-  const config = await resolveFacturacionConfig()
+  const config = configOverride ?? (await resolveFacturacionConfig())
   if (!config?.facturacion_activa) {
     throw new Error("La facturacion esta desactivada en el entorno")
   }

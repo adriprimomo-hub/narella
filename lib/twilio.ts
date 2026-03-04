@@ -10,8 +10,6 @@ import twilio from "twilio"
  *
  * Variables de entorno opcionales:
  * - TWILIO_WHATSAPP_DEFAULT_COUNTRY_CODE: Prefijo de país para números sin + (default: 54)
- * - TWILIO_WHATSAPP_TEMPLATE_CONFIRMATION: Plantilla para confirmaciones
- * - TWILIO_WHATSAPP_TEMPLATE_REMINDER: Plantilla para recordatorios
  *
  * Placeholders disponibles en plantillas:
  * {cliente} {cliente_nombre} {cliente_apellido} {fecha} {hora} {servicio} {empleada} {duracion} {link}
@@ -89,12 +87,8 @@ const getTemplate = (type: "confirmation" | "reminder", override?: string | null
   if (override && String(override).trim().length > 0) {
     return normalizeTemplate(override, type === "confirmation" ? DEFAULT_CONFIRMATION_TEMPLATE : DEFAULT_REMINDER_TEMPLATE)
   }
-  const envKey =
-    type === "confirmation"
-      ? "TWILIO_WHATSAPP_TEMPLATE_CONFIRMATION"
-      : "TWILIO_WHATSAPP_TEMPLATE_REMINDER"
   const fallback = type === "confirmation" ? DEFAULT_CONFIRMATION_TEMPLATE : DEFAULT_REMINDER_TEMPLATE
-  return normalizeTemplate(process.env[envKey], fallback)
+  return fallback
 }
 
 const buildTemplateVars = (data: TurnoWhatsAppData) => {

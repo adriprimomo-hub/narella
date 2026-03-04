@@ -17,7 +17,6 @@ const createTurnoSchema = z.object({
   fecha_inicio: z.string().min(1),
   duracion_minutos: z.coerce.number().int().positive(),
   observaciones: z.string().optional().nullable(),
-  declaracion_jurada_plantilla_id: z.string().optional().nullable(),
 })
 
 const estaDentroDeHorario = (horarios: Horario[] | null, inicio: Date, duracionMinutos: number) => {
@@ -162,7 +161,6 @@ export async function POST(request: Request) {
     fecha_inicio,
     duracion_minutos,
     observaciones,
-    declaracion_jurada_plantilla_id,
   } = payload
 
   const fechaInicioDate = new Date(fecha_inicio)
@@ -207,7 +205,7 @@ export async function POST(request: Request) {
 
   const { data: servicio, error: servicioError } = await db
     .from("servicios")
-    .select("id, nombre, empleadas_habilitadas")
+    .select("id, nombre, empleadas_habilitadas, declaracion_jurada_plantilla_id")
     .eq("id", servicio_id)
     .eq("usuario_id", tenantId)
     .maybeSingle()
@@ -245,12 +243,12 @@ export async function POST(request: Request) {
     )
   }
 
-  let declaracionPlantillaId: string | null = null
-  if (declaracion_jurada_plantilla_id) {
+  let declaracionPlantillaId: string | null = String(servicio?.declaracion_jurada_plantilla_id || "").trim() || null
+  if (declaracionPlantillaId) {
     const { data: plantilla, error: plantillaError } = await db
       .from("declaraciones_juradas_plantillas")
       .select("id, activa")
-      .eq("id", declaracion_jurada_plantilla_id)
+      .eq("id", declaracionPlantillaId)
       .eq("usuario_id", tenantId)
       .maybeSingle()
 

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
@@ -57,6 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, giftcardUpdateSchema)
   if (validationResponse) return validationResponse
@@ -65,7 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .from("giftcards")
     .select("*")
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (currentError || !current) {
@@ -111,7 +113,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     } else if (isSupabaseStorageConfigured()) {
       try {
         const uploaded = await uploadGiftcardImageToStorage({
-          usuarioId: user.id,
+          usuarioId: tenantId,
           giftcardId: id,
           imageData: rawImage,
         })
@@ -131,7 +133,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       } catch (error: any) {
         console.warn("[giftcards] No se pudo subir imagen a Storage, se mantiene base64", {
           giftcardId: id,
-          userId: user.id,
+          userId: tenantId,
           error: error?.message || "Error desconocido",
         })
         updateData.imagen_base64 = rawImage
@@ -150,7 +152,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from("servicios")
       .select("id, precio, precio_lista")
       .in("id", payload.servicio_ids)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
     const montoServicios = computeMontoServicios(servicios || [], payload.servicio_ids)
     if (Number.isFinite(montoServicios) && montoServicios > 0) {
       updateData.monto_total = montoServicios
@@ -161,7 +163,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .from("giftcards")
     .update(updateData)
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .select(
       `
       *,
@@ -185,7 +187,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from("giftcards")
       .update(legacyUpdate)
       .eq("id", id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .select(
         `
       *,
@@ -207,12 +209,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const { data: current } = await db
     .from("giftcards")
     .select("*")
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .maybeSingle()
 
   if (current && isUsada(current)) {
@@ -226,7 +229,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     })
   }
 
-  const { error } = await db.from("giftcards").delete().eq("id", id).eq("usuario_id", user.id)
+  const { error } = await db.from("giftcards").delete().eq("id", id).eq("usuario_id", tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

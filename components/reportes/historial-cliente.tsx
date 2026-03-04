@@ -393,6 +393,22 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
                     Respondida: {formatDateTime(declaracionSeleccionada.submitted_at)}
                   </span>
                 )}
+                {declaracionSeleccionada.id && declaracionSeleccionada.pdf_disponible && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      window.open(
+                        `/api/declaraciones-juradas/respuestas/${declaracionSeleccionada.id}/pdf`,
+                        "_blank",
+                        "noopener,noreferrer",
+                      )
+                    }
+                  >
+                    Ver PDF
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-2 rounded-md border p-3">

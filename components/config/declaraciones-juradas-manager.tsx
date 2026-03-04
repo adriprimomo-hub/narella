@@ -359,7 +359,7 @@ export function DeclaracionesJuradasManager() {
                           <SelectItem value="number">Número</SelectItem>
                           <SelectItem value="date">Fecha</SelectItem>
                           <SelectItem value="yes_no">Sí / No</SelectItem>
-                          <SelectItem value="select">Selector</SelectItem>
+                          <SelectItem value="select">Lista desplegable</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -390,18 +390,23 @@ export function DeclaracionesJuradasManager() {
                       />
                     </div>
                     {campo.tipo === "select" && (
-                      <Input
-                        value={campo.opciones || ""}
-                        onChange={(event) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            campos: prev.campos.map((item, idx) =>
-                              idx === index ? { ...item, opciones: event.target.value } : item,
-                            ),
-                          }))
-                        }
-                        placeholder="Opciones separadas por coma"
-                      />
+                      <div className="space-y-1">
+                        <Input
+                          value={campo.opciones || ""}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              campos: prev.campos.map((item, idx) =>
+                                idx === index ? { ...item, opciones: event.target.value } : item,
+                              ),
+                            }))
+                          }
+                          placeholder="Opciones separadas por coma"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Lista desplegable para que la clienta elija una única opción.
+                        </p>
+                      </div>
                     )}
                     <div className="flex items-center justify-between">
                       <label className="flex items-center gap-2 text-sm">

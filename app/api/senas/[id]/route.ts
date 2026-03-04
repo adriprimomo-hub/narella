@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { emitirFactura, type FacturaItem } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   buildFacturaRetryPayload,
   guardarFacturaEmitida,
@@ -44,6 +46,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, senaUpdateSchema)
   if (validationResponse) return validationResponse
@@ -62,7 +65,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .from("senas")
     .update(updateData)
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .select()
     .single()
 
@@ -78,8 +81,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
-  const { error } = await db.from("senas").delete().eq("id", id).eq("usuario_id", user.id)
+  const { error } = await db.from("senas").delete().eq("id", id).eq("usuario_id", tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
@@ -94,6 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, senaIncrementoSchema)
   if (validationResponse) return validationResponse
@@ -105,7 +110,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .from("senas")
     .select("id, monto, estado, cliente_id, servicio_id")
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (senaError || !sena) {
@@ -125,7 +130,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .select()
     .single()
 
@@ -133,7 +138,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   await db.from("caja_movimientos").insert([
     {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       creado_por_username: username,
       medio_pago: metodoPago,
       tipo: "ingreso",
@@ -156,13 +161,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .from("clientes")
         .select("nombre, apellido")
         .eq("id", sena.cliente_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const { data: servicioData } = await db
         .from("servicios")
         .select("nombre")
         .eq("id", sena.servicio_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const facturaItems: FacturaItem[] = [
         {
@@ -183,12 +188,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         total: incremento,
         metodo_pago: metodoPago,
       })
+      const facturacionConfig = await resolveTenantFacturacionConfig(db, tenantId)
       facturaResponse = await emitirFactura({
         cliente: clienteFactura,
         items: facturaItems,
         total: incremento,
         metodo_pago: metodoPago,
-        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: user.id })) || undefined,
+        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: tenantId })) || undefined,
+        config: facturacionConfig,
       })
     } catch (error: any) {
       facturaError = error?.message || "No se pudo emitir la factura"
@@ -198,7 +205,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (facturaResponse?.factura) {
     const saved = await guardarFacturaEmitida({
       db,
-      userId: user.id,
+      userId: tenantId,
+      actorUserId: user.id,
       username,
       origenTipo: "sena_incremento",
       origenId: id,
@@ -232,7 +240,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (facturaRetryPayload) {
       const pending = await guardarFacturaPendiente({
         db,
-        userId: user.id,
+        userId: tenantId,
+        actorUserId: user.id,
         username,
         origenTipo: "sena_incremento",
         origenId: id,

@@ -82,13 +82,69 @@ export default function DeclaracionJuradaPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
+  const [signatureLarge, setSignatureLarge] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null)
+  const hasSignatureRef = useRef(false)
   const drawingRef = useRef(false)
+  const activePointerIdRef = useRef<number | null>(null)
+
+  const resizeSignatureCanvas = () => {
+    const canvas = canvasRef.current
+    const wrap = canvasWrapRef.current
+    if (!canvas || !wrap) return
+    const ratio = Math.max(1, Math.floor((window.devicePixelRatio || 1) * 100) / 100)
+    const isMobileViewport = window.innerWidth < 640
+    const displayWidth = Math.max(280, Math.floor(wrap.clientWidth || 0))
+    const displayHeight = signatureLarge ? (isMobileViewport ? 380 : 320) : isMobileViewport ? 270 : 200
+    const prevSnapshot = hasSignatureRef.current ? canvas.toDataURL("image/png") : null
+
+    canvas.width = Math.floor(displayWidth * ratio)
+    canvas.height = Math.floor(displayHeight * ratio)
+    canvas.style.width = `${displayWidth}px`
+    canvas.style.height = `${displayHeight}px`
+
+    const context = canvas.getContext("2d")
+    if (!context) return
+    context.lineCap = "round"
+    context.lineJoin = "round"
+    context.strokeStyle = "#111827"
+    const baseLineWidth = isMobileViewport ? 3.6 : 3
+    context.lineWidth = (signatureLarge ? baseLineWidth + 0.8 : baseLineWidth) * ratio
+
+    if (prevSnapshot) {
+      const image = new Image()
+      image.onload = () => {
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      }
+      image.src = prevSnapshot
+    }
+  }
 
   useEffect(() => {
     if (!campos.length) return
     setValues(buildInitialValues(campos, data?.respuestas))
   }, [campos, data?.respuestas])
+
+  useEffect(() => {
+    hasSignatureRef.current = hasSignature
+  }, [hasSignature])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (window.innerWidth < 640) {
+      setSignatureLarge(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    resizeSignatureCanvas()
+    const onResize = () => resizeSignatureCanvas()
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [signatureLarge])
 
   useEffect(() => {
     if (!canvasRef.current || !data?.firma_data_url) return
@@ -115,15 +171,17 @@ export default function DeclaracionJuradaPage() {
     if (!canvas) return
     const context = canvas.getContext("2d")
     if (!context) return
+    event.preventDefault()
+    canvas.setPointerCapture(event.pointerId)
+    activePointerIdRef.current = event.pointerId
     const rect = canvas.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const x = (event.clientX - rect.left) * scaleX
+    const y = (event.clientY - rect.top) * scaleY
     drawingRef.current = true
     context.beginPath()
     context.moveTo(x, y)
-    context.lineWidth = 2
-    context.lineCap = "round"
-    context.strokeStyle = "#111827"
     setHasSignature(true)
   }
 
@@ -133,14 +191,24 @@ export default function DeclaracionJuradaPage() {
     if (!canvas) return
     const context = canvas.getContext("2d")
     if (!context) return
+    event.preventDefault()
     const rect = canvas.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const x = (event.clientX - rect.left) * scaleX
+    const y = (event.clientY - rect.top) * scaleY
     context.lineTo(x, y)
     context.stroke()
   }
 
-  const stopDraw = () => {
+  const stopDraw = (event?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event && activePointerIdRef.current === event.pointerId) {
+      const canvas = canvasRef.current
+      if (canvas && canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId)
+      }
+      activePointerIdRef.current = null
+    }
     drawingRef.current = false
   }
 
@@ -290,22 +358,34 @@ export default function DeclaracionJuradaPage() {
                   Firma
                   <span className="text-destructive"> *</span>
                 </label>
-                {!readonly && (
-                  <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
-                    Limpiar firma
-                  </Button>
-                )}
               </div>
-              <canvas
-                ref={canvasRef}
-                width={900}
-                height={280}
-                className="w-full rounded-md border bg-white"
-                onPointerDown={readonly ? undefined : startDraw}
-                onPointerMove={readonly ? undefined : draw}
-                onPointerUp={readonly ? undefined : stopDraw}
-                onPointerLeave={readonly ? undefined : stopDraw}
-              />
+              <div ref={canvasWrapRef} className="rounded-md border bg-white p-2">
+                <canvas
+                  ref={canvasRef}
+                  className="w-full rounded-sm bg-white touch-none"
+                  style={{ touchAction: "none" }}
+                  onPointerDown={readonly ? undefined : startDraw}
+                  onPointerMove={readonly ? undefined : draw}
+                  onPointerUp={readonly ? undefined : stopDraw}
+                  onPointerCancel={readonly ? undefined : stopDraw}
+                  onPointerLeave={readonly ? undefined : stopDraw}
+                />
+              </div>
+              {!readonly && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Consejo: usa un dedo o lápiz. Si te cuesta, activa "Firma grande".
+                  </p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setSignatureLarge((prev) => !prev)}>
+                      {signatureLarge ? "Firma normal" : "Firma grande"}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
+                      Limpiar firma
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

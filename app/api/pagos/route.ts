@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { emitirFactura, type FacturaAjuste, type FacturaItem } from "@/lib/facturacion"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 import {
   buildFacturaRetryPayload,
   guardarFacturaEmitida,
@@ -96,6 +98,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const turnoId = url.searchParams.get("turno_id")
@@ -108,7 +111,7 @@ export async function GET(request: Request) {
       turnos (cliente_id, estado, servicios:servicio_id(nombre, precio), servicio_final_id, servicio_final:servicio_final_id(nombre))
     `,
     )
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (turnoId) query = query.eq("turno_id", turnoId)
 
@@ -126,6 +129,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -161,7 +165,7 @@ export async function POST(request: Request) {
   const { data: turno, error: turnoError } = await db
     .from("turnos")
     .select("id, cliente_id, servicio_id, empleada_id, empleada_final_id, duracion_minutos, finalizado_en, iniciado_en, observaciones, grupo_id")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("id", turnoId)
     .single()
 
@@ -173,7 +177,7 @@ export async function POST(request: Request) {
     const { data: turnosGrupo } = await db
       .from("turnos")
       .select("id")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .eq("grupo_id", turno.grupo_id)
 
     if ((turnosGrupo || []).length > 1) {
@@ -188,7 +192,7 @@ export async function POST(request: Request) {
       .from("empleadas")
       .select("nombre, apellido")
       .eq("id", empleadaSnapshotId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     empleadaSnapshot = empleadaData || null
   }
@@ -198,7 +202,7 @@ export async function POST(request: Request) {
       .from("productos")
       .select("precio_lista, precio_descuento")
       .eq("id", productoId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     const precioDescuento = Number(producto?.precio_descuento ?? 0)
     if (Number.isFinite(precioDescuento) && precioDescuento >= 0) return precioDescuento
@@ -215,7 +219,7 @@ export async function POST(request: Request) {
       .from("servicios")
       .select("precio_lista, precio")
       .eq("id", servicioId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     const precioServicio = Number(servicio?.precio_lista ?? servicio?.precio ?? 0)
     for (const servicioAgregado of serviciosAgregados) {
@@ -224,7 +228,7 @@ export async function POST(request: Request) {
         .from("servicios")
         .select("precio_lista, precio")
         .eq("id", servicioAgregado.servicio_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const cantidad = Number(servicioAgregado.cantidad || 1)
       const precio = Number(servicioExtra?.precio_lista ?? servicioExtra?.precio ?? 0)
@@ -276,7 +280,7 @@ export async function POST(request: Request) {
           .from("servicios")
           .select("precio_lista, precio")
           .eq("id", row.servicio_id)
-          .eq("usuario_id", user.id)
+          .eq("usuario_id", tenantId)
           .single()
         row.precio_unitario = Number(servicio?.precio_lista ?? servicio?.precio ?? 0)
       }
@@ -324,7 +328,7 @@ export async function POST(request: Request) {
       .from("giftcards")
       .select("*")
       .eq("id", giftcardId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
 
     if (!giftcard) {
@@ -365,7 +369,7 @@ export async function POST(request: Request) {
         .from("servicios")
         .select("precio_lista, precio")
         .eq("id", servicioFinalId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       const fallback = Number(servicioBase?.precio_lista ?? servicioBase?.precio ?? 0)
       if (Number.isFinite(fallback)) {
@@ -394,7 +398,7 @@ export async function POST(request: Request) {
     const { data: sena } = await db
       .from("senas")
       .select("id, monto, estado, fecha_pago, servicio_id")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .eq("id", senaId)
       .single()
     if (sena && sena.estado === "pendiente") {
@@ -415,7 +419,7 @@ export async function POST(request: Request) {
         .from("senas")
         .update({ estado: "aplicada", aplicada_en: new Date().toISOString(), aplicada_por: user.id })
         .eq("id", senaId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
       if (senaUpdateError) {
         return NextResponse.json({ error: senaUpdateError.message }, { status: 500 })
       }
@@ -428,7 +432,7 @@ export async function POST(request: Request) {
       .from("servicios")
       .select("nombre")
       .eq("id", senaServicioId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
     senaServicioNombre = senaServicio?.nombre || null
   }
@@ -462,7 +466,7 @@ export async function POST(request: Request) {
         : {}),
       updated_at: new Date(),
     })
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("id", turnoId)
   if (turnoUpdateError) {
     return NextResponse.json({ error: turnoUpdateError.message }, { status: 500 })
@@ -472,7 +476,7 @@ export async function POST(request: Request) {
     .from("pagos")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         turno_id: turnoId,
         monto: montoParaPago,
@@ -500,7 +504,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", giftcardAplicadaId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
     if (giftcardUpdateError) {
       return NextResponse.json({ error: giftcardUpdateError.message }, { status: 500 })
     }
@@ -510,7 +514,7 @@ export async function POST(request: Request) {
   if (montoCobrado > 0) {
     const { error: cajaServicioError } = await db.from("caja_movimientos").insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         medio_pago: metodoPago,
         tipo: "ingreso",
@@ -536,7 +540,7 @@ export async function POST(request: Request) {
       .from("productos")
       .select("id, nombre, precio_lista, precio_descuento, stock_actual")
       .eq("id", prod.producto_id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
 
     if (productoError) return NextResponse.json({ error: productoError.message }, { status: 500 })
@@ -568,7 +572,7 @@ export async function POST(request: Request) {
     // Registrar movimiento de stock
     const { error: movimientoProductoError } = await db.from("producto_movimientos").insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         producto_id: prod.producto_id,
         tipo: "venta",
         cantidad,
@@ -591,7 +595,7 @@ export async function POST(request: Request) {
       .from("productos")
       .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
       .eq("id", prod.producto_id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
     if (stockUpdateError) {
       return NextResponse.json({ error: stockUpdateError.message }, { status: 500 })
     }
@@ -599,7 +603,7 @@ export async function POST(request: Request) {
     // Registrar ingreso en caja por producto
     const { error: cajaProductoError } = await db.from("caja_movimientos").insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         medio_pago: metodoPago,
         tipo: "ingreso",
@@ -627,7 +631,7 @@ export async function POST(request: Request) {
         .from("clientes")
         .select("nombre, apellido")
         .eq("id", turno.cliente_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
 
       const servicioIds = new Set<string>()
@@ -717,6 +721,7 @@ export async function POST(request: Request) {
         descuento_sena: senaAplicadaMonto,
         ajustes: ajustesFactura,
       })
+      const facturacionConfig = await resolveTenantFacturacionConfig(db, tenantId)
       facturaResponse = await emitirFactura({
         cliente: clienteFactura,
         items: facturaItems,
@@ -724,7 +729,8 @@ export async function POST(request: Request) {
         metodo_pago: metodoPago,
         descuento_sena: senaAplicadaMonto,
         ajustes: ajustesFactura,
-        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: user.id })) || undefined,
+        numero_sugerido: (await sugerirNumeroFacturaLocal({ db, userId: tenantId })) || undefined,
+        config: facturacionConfig,
       })
     } catch (error: any) {
       facturaError = error?.message || "No se pudo emitir la factura"
@@ -734,7 +740,8 @@ export async function POST(request: Request) {
   if (facturaResponse?.factura) {
     const saved = await guardarFacturaEmitida({
       db,
-      userId: user.id,
+      userId: tenantId,
+      actorUserId: user.id,
       username,
       origenTipo: "turno_pago",
       origenId: data.id,
@@ -769,7 +776,8 @@ export async function POST(request: Request) {
     if (facturaRetryPayload) {
       const pending = await guardarFacturaPendiente({
         db,
-        userId: user.id,
+        userId: tenantId,
+        actorUserId: user.id,
         username,
         origenTipo: "turno_pago",
         origenId: data.id,
@@ -800,3 +808,6 @@ export async function POST(request: Request) {
     factura_error: facturaError,
   })
 }
+
+
+

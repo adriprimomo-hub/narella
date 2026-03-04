@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
@@ -26,6 +27,7 @@ const servicioUpdateSchema = z
     comision_monto_fijo: z.coerce.number().nonnegative().optional().nullable(),
     categoria_id: z.string().optional().nullable(),
     recurso_id: z.string().optional().nullable(),
+    declaracion_jurada_plantilla_id: z.string().optional().nullable(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Debe enviar al menos un campo",
@@ -56,6 +58,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -73,6 +76,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     comision_monto_fijo,
     categoria_id,
     recurso_id,
+    declaracion_jurada_plantilla_id,
   } = payload
   const updatePayload: Record<string, unknown> = { updated_at: new Date() }
   if (nombre !== undefined) updatePayload.nombre = nombre
@@ -90,25 +94,45 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (comision_monto_fijo !== undefined) updatePayload.comision_monto_fijo = comision_monto_fijo ?? null
   if (categoria_id !== undefined) {
     updatePayload.categoria_id = categoria_id || null
-    updatePayload.categoria = await resolveCategoriaValue(db, user.id, categoria_id)
+    updatePayload.categoria = await resolveCategoriaValue(db, tenantId, categoria_id)
   }
   if (recurso_id !== undefined) updatePayload.recurso_id = recurso_id || null
+  if (declaracion_jurada_plantilla_id !== undefined) {
+    if (!declaracion_jurada_plantilla_id) {
+      updatePayload.declaracion_jurada_plantilla_id = null
+    } else {
+      const { data: plantilla, error: plantillaError } = await db
+        .from("declaraciones_juradas_plantillas")
+        .select("id, activa")
+        .eq("id", declaracion_jurada_plantilla_id)
+        .eq("usuario_id", tenantId)
+        .maybeSingle()
+      if (plantillaError) return NextResponse.json({ error: plantillaError.message }, { status: 500 })
+      if (!plantilla) {
+        return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
+      }
+      if (plantilla.activa === false) {
+        return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
+      }
+      updatePayload.declaracion_jurada_plantilla_id = plantilla.id
+    }
+  }
 
   const { data, error } = await db
     .from("servicios")
     .update(updatePayload)
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (Array.isArray(empleadas_comision)) {
-    await db.from("servicio_empleada_comisiones").delete().eq("servicio_id", id).eq("usuario_id", user.id)
+    await db.from("servicio_empleada_comisiones").delete().eq("servicio_id", id).eq("usuario_id", tenantId)
     const payload = empleadas_comision
       .filter((e: any) => e.empleada_id)
       .map((e: any) => ({
-        usuario_id: user.id,
+        usuario_id: tenantId,
         servicio_id: id,
         empleada_id: e.empleada_id,
         comision_pct: e.comision_pct ?? null,
@@ -130,6 +154,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user) || user.id
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -137,7 +162,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     .from("servicios")
     .update({ activo: false, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

@@ -87,6 +87,14 @@ const roleLabel = (rol?: string) => {
   return "Recepción"
 }
 
+const MESSAGE_PLACEHOLDERS = {
+  confirmaciones: ["{cliente}", "{cliente_nombre}", "{cliente_apellido}", "{fecha}", "{hora}", "{servicio}", "{empleada}", "{duracion}", "{link}"],
+  facturasGiftcards: ["{cliente}", "{clienta}", "{numero}", "{link}"],
+  liquidaciones: ["{empleada}", "{staff}", "{link}"],
+  serviciosVencidos: ["{clienta}", "{cliente}", "{cliente_nombre}", "{cantidad_dias}", "{dias}", "{servicio_vencido}", "{servicio}"],
+  declaracionesJuradas: ["{clienta}", "{cliente}", "{cliente_nombre}", "{servicio}", "{fecha}", "{hora}", "{link}"],
+}
+
 export function ConfigForm() {
   const { data: config, mutate } = useSWR<Usuario>("/api/config", fetcher)
   const [metodosPago, setMetodosPago] = useState<MetodoPagoConfig[]>(metodosBase)
@@ -907,6 +915,9 @@ export function ConfigForm() {
                     setComunicacionDraft((prev) => ({ ...prev, wa_template_confirmaciones: e.target.value }))
                   }
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Placeholders: {MESSAGE_PLACEHOLDERS.confirmaciones.join(", ")}
+                </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Facturas / Giftcards</label>
@@ -917,6 +928,9 @@ export function ConfigForm() {
                     setComunicacionDraft((prev) => ({ ...prev, wa_template_facturas_giftcards: e.target.value }))
                   }
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Placeholders: {MESSAGE_PLACEHOLDERS.facturasGiftcards.join(", ")}
+                </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Liquidaciones</label>
@@ -927,6 +941,9 @@ export function ConfigForm() {
                     setComunicacionDraft((prev) => ({ ...prev, wa_template_liquidaciones: e.target.value }))
                   }
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Placeholders: {MESSAGE_PLACEHOLDERS.liquidaciones.join(", ")}
+                </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Servicios vencidos</label>
@@ -937,6 +954,9 @@ export function ConfigForm() {
                     setComunicacionDraft((prev) => ({ ...prev, wa_template_servicios_vencidos: e.target.value }))
                   }
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Placeholders: {MESSAGE_PLACEHOLDERS.serviciosVencidos.join(", ")}
+                </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Declaraciones juradas</label>
@@ -947,6 +967,9 @@ export function ConfigForm() {
                     setComunicacionDraft((prev) => ({ ...prev, wa_template_declaraciones_juradas: e.target.value }))
                   }
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Placeholders: {MESSAGE_PLACEHOLDERS.declaracionesJuradas.join(", ")}
+                </p>
               </div>
             </div>
           </div>

@@ -123,7 +123,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { data, error: declaracionesError } = await db
       .from("declaraciones_juradas_respuestas")
       .select(
-        "id, turno_id, estado, submitted_at, firma_data_url, respuestas, created_at, plantilla:plantilla_id(id, nombre, campos)",
+        "id, turno_id, estado, submitted_at, firma_data_url, respuestas, pdf_filename, created_at, plantilla:plantilla_id(id, nombre, campos)",
       )
       .in("turno_id", turnoIds)
       .eq("usuario_id", tenantId)
@@ -145,6 +145,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       submitted_at: item.submitted_at || null,
       firma_data_url: item.firma_data_url || null,
       respuestas: item.respuestas || {},
+      pdf_disponible: Boolean(item.pdf_filename),
+      pdf_filename: item.pdf_filename || null,
       plantilla: item.plantilla
         ? {
             id: item.plantilla.id,

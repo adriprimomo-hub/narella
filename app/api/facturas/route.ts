@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role) && role !== "recepcion") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const queryText = url.searchParams.get("q")?.trim() || ""
@@ -61,7 +63,7 @@ export async function GET(request: Request) {
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : null
 
   const buildBaseQuery = () => {
-    let query = db.from("facturas").select("*").eq("usuario_id", user.id)
+    let query = db.from("facturas").select("*").eq("usuario_id", tenantId)
     if (!queryText && limit && !page) query = query.limit(limit)
     return query
   }
