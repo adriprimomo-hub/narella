@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Empleada } from "@/components/empleadas/types"
 import { DeclaracionesJuradasManager } from "@/components/config/declaraciones-juradas-manager"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((res) => res.json())
 
@@ -88,11 +89,11 @@ const roleLabel = (rol?: string) => {
 }
 
 const MESSAGE_PLACEHOLDERS = {
-  confirmaciones: ["{cliente}", "{cliente_nombre}", "{cliente_apellido}", "{fecha}", "{hora}", "{servicio}", "{empleada}", "{duracion}", "{link}"],
-  facturasGiftcards: ["{cliente}", "{clienta}", "{numero}", "{link}"],
-  liquidaciones: ["{empleada}", "{staff}", "{link}"],
-  serviciosVencidos: ["{clienta}", "{cliente}", "{cliente_nombre}", "{cantidad_dias}", "{dias}", "{servicio_vencido}", "{servicio}"],
-  declaracionesJuradas: ["{clienta}", "{cliente}", "{cliente_nombre}", "{servicio}", "{fecha}", "{hora}", "{link}"],
+  confirmaciones: ["{cliente}", "{fecha}", "{hora}", "{servicio}", "{empleada}", "{duracion}", "{link}"],
+  facturasGiftcards: ["{cliente}", "{numero}", "{de_parte_de}", "{link}"],
+  liquidaciones: ["{empleada}", "{link}"],
+  serviciosVencidos: ["{clienta}", "{cantidad_dias}", "{servicio_vencido}"],
+  declaracionesJuradas: ["{clienta}", "{servicio}", "{fecha}", "{hora}", "{link}"],
 }
 
 export function ConfigForm() {
@@ -412,7 +413,7 @@ export function ConfigForm() {
   }
 
   const handleDeleteUser = async (id: string) => {
-    if (!confirm("Eliminar usuario?")) return
+    if (!(await showSystemConfirm("Eliminar usuario?"))) return
     setUserMessage("")
     setUserLoading(true)
     try {
@@ -727,8 +728,8 @@ export function ConfigForm() {
                       type="button"
                       variant="danger"
                       size="sm"
-                      onClick={() => {
-                        if (confirm(`¿Eliminar método "${metodo.nombre}"?`)) {
+                      onClick={async () => {
+                        if (await showSystemConfirm(`¿Eliminar método "${metodo.nombre}"?`)) {
                           setMetodosDraft((prev) => prev.filter((m) => m.nombre !== metodo.nombre))
                         }
                       }}

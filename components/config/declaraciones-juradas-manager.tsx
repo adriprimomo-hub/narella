@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Loader2Icon, PencilIcon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 type DeclaracionCampoTipo = "text" | "textarea" | "number" | "date" | "yes_no" | "select"
 
@@ -119,7 +120,7 @@ export function DeclaracionesJuradasManager() {
   }
 
   const handleDelete = async (plantilla: DeclaracionPlantilla) => {
-    if (!confirm(`¿Eliminar declaración jurada "${plantilla.nombre}"?`)) return
+    if (!(await showSystemConfirm(`¿Eliminar declaración jurada "${plantilla.nombre}"?`))) return
     const res = await fetch(`/api/declaraciones-juradas/plantillas/${plantilla.id}`, { method: "DELETE" })
     if (!res.ok) {
       const payload = await res.json().catch(() => null)

@@ -11,6 +11,7 @@ import { ClockIcon, ImagePlusIcon, Loader2Icon, SaveIcon, SearchIcon, Trash2Icon
 import type { Turno } from "@/components/turnos/turnos-grid"
 import type { Servicio } from "@/components/servicios/servicios-list"
 import { VerTurnoFotoButton } from "@/components/turnos/ver-turno-foto-button"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 type Producto = {
   id: string
@@ -169,7 +170,7 @@ export function StaffTurnosPanel() {
   }
 
   const handleRemoveFoto = async (turnoId: string) => {
-    if (!confirm("¿Quitar la foto del trabajo cargada?")) return
+    if (!(await showSystemConfirm("¿Quitar la foto del trabajo cargada?"))) return
     setFotoError(null)
     setUploadingFotoTurnoId(turnoId)
     try {

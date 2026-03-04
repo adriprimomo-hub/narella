@@ -15,6 +15,7 @@ import { GiftcardForm, type GiftcardData } from "./giftcard-form"
 import { GiftcardPreviewDialog } from "./giftcard-preview-dialog"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { formatDate } from "@/lib/date-format"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const GIFTCARDS_PAGE_SIZE = 60
@@ -199,7 +200,7 @@ export function GiftcardsPanel() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Eliminar giftcard?")) return
+    if (!(await showSystemConfirm("Eliminar giftcard?"))) return
     const res = await fetch(`/api/giftcards/${id}`, { method: "DELETE" })
     if (!res.ok) return
     mutate()
@@ -414,6 +415,7 @@ export function GiftcardsPanel() {
                 cliente: previewGiftcard.clientes
                   ? `${previewGiftcard.clientes.nombre} ${previewGiftcard.clientes.apellido}`.trim()
                   : undefined,
+                de_parte_de: previewGiftcard.de_parte_de || null,
                 valido_hasta: previewGiftcard.valido_hasta || null,
               }
             : null

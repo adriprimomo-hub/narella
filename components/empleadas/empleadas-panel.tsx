@@ -12,6 +12,7 @@ import { CalendarIcon, CalendarOffIcon, CheckIcon, Loader2Icon, PencilIcon, Plus
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate } from "@/lib/date-format"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const EMPLEADAS_PAGE_SIZE = 60
@@ -406,7 +407,7 @@ export function EmpleadasPanel() {
   }
 
   const handleEliminarAusencia = async (ausenciaId: string) => {
-    if (!confirm("Eliminar esta ausencia?")) return
+    if (!(await showSystemConfirm("Eliminar esta ausencia?"))) return
 
     try {
       await fetch(`/api/empleadas/ausencias/${ausenciaId}`, { method: "DELETE" })
@@ -431,7 +432,7 @@ export function EmpleadasPanel() {
 
   const handleDelete = async (id: string) => {
     if (!isAdmin) return
-    if (!confirm("Eliminar empleada?")) return
+    if (!(await showSystemConfirm("Eliminar empleada?"))) return
     await fetch(`/api/empleadas/${id}`, { method: "DELETE" })
     mutate()
   }

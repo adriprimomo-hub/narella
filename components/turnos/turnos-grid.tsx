@@ -28,6 +28,7 @@ import type { Cliente } from "../clientes/clientes-list"
 import type { Servicio } from "../servicios/servicios-list"
 import type { Empleada, HorarioLaboral } from "../empleadas/types"
 import { formatDate, formatDateRange, formatDateTime } from "@/lib/date-format"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = async <T,>(url: string): Promise<T[]> => {
   const res = await fetch(url)
@@ -553,7 +554,7 @@ const slots = useMemo(() => {
 
   const handleDelete = async (id: string) => {
     if (!isAdmin) return
-    if (!confirm("Cancelar turno?")) return
+    if (!(await showSystemConfirm("Cancelar turno?"))) return
     await fetch(`/api/turnos/${id}`, { method: "DELETE" })
     mutate()
     if (selectedTurnoId === id) {
@@ -565,7 +566,7 @@ const slots = useMemo(() => {
     if (!isAdmin) return
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
     if (!uniqueIds.length) return
-    if (!confirm(`Cancelar ${uniqueIds.length} turnos del grupo?`)) return
+    if (!(await showSystemConfirm(`Cancelar ${uniqueIds.length} turnos del grupo?`))) return
 
     for (const id of uniqueIds) {
       const res = await fetch(`/api/turnos/${id}`, { method: "DELETE" })

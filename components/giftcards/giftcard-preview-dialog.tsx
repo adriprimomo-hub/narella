@@ -11,6 +11,7 @@ import { createShareLink } from "@/lib/share-links-client"
 export type GiftcardPreviewInfo = {
   numero?: string
   cliente?: string
+  de_parte_de?: string | null
   valido_hasta?: string | null
 }
 
@@ -90,6 +91,7 @@ export function GiftcardPreviewDialog({
       cliente: clienteNombre,
       clienta: clienteNombre,
       numero: info?.numero?.trim() || "",
+      de_parte_de: String(info?.de_parte_de || "").trim(),
       link: shareUrl,
     })
     if (navigator.share) {

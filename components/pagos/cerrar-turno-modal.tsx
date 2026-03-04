@@ -13,9 +13,7 @@ import type { Empleada } from "../empleadas/types"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import {
-  CopyIcon,
   CreditCardIcon,
-  ExternalLinkIcon,
   Loader2Icon,
   MessageCircleIcon,
   SearchIcon,
@@ -27,6 +25,7 @@ import {
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { FacturandoDialog } from "@/components/facturacion/facturando-dialog"
 import { VerTurnoFotoButton } from "@/components/turnos/ver-turno-foto-button"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 interface CerrarTurnoModalProps {
   turno: Turno
@@ -317,7 +316,6 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
   const declaracionEstadoActual = declaracionEstado || (declaracionEnviada ? "pendiente" : null)
   const declaracionCompletada = declaracionEstadoActual === "completada"
   const declaracionPlantillaNombre = turno.declaracion_jurada_plantilla?.nombre || declaracionPayload?.plantilla_nombre || null
-  const declaracionLink = declaracionPayload?.link || null
 
   useEffect(() => {
     if (!puedeFacturar && facturar) {
@@ -431,7 +429,7 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
       const detalle = !declaracionEnviada
         ? "no fue enviada"
         : `está ${declaracionEstadoLabel(declaracionEstadoActual).toLowerCase()}`
-      if (!confirm(`La declaración jurada ${detalle}. ¿Querés cerrar y cobrar igual?`)) {
+      if (!(await showSystemConfirm(`La declaración jurada ${detalle}. ¿Querés cerrar y cobrar igual?`))) {
         return
       }
     }
@@ -543,31 +541,13 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
           )}
           {declaracionRequerida && (
             <div className="space-y-3 rounded-lg border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
                 <div>
                   <p className="text-sm font-medium">
                     Declaración jurada{declaracionPlantillaNombre ? ` · ${declaracionPlantillaNombre}` : ""}
                   </p>
-                  <p className="text-xs text-muted-foreground">Revisá el estado antes de cerrar y cobrar.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant={declaracionEnviada ? "info" : "neutral"}>
-                    {declaracionEnviada ? "Enviada" : "Sin enviar"}
-                  </Badge>
-                  <Badge variant={declaracionCompletada ? "success" : "warning"}>
-                    {declaracionCompletada
-                      ? "Completada"
-                      : declaracionEnviada
-                        ? declaracionEstadoLabel(declaracionEstadoActual)
-                        : "Sin completar"}
-                  </Badge>
                 </div>
               </div>
-              {!declaracionCompletada && (
-                <p className="text-xs text-[color:var(--status-warning-fg)]">
-                  Si cerrás y cobrás ahora, se confirmará con aviso porque la DJ aún no está completada.
-                </p>
-              )}
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -581,46 +561,18 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
                       <Loader2Icon className="h-4 w-4 animate-spin" />
                       Generando...
                     </>
-                  ) : (
-                    <>
-                      <MessageCircleIcon className="h-4 w-4" />
-                      {declaracionEnviada ? "Reenviar DJ" : "Enviar DJ"}
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={async () => {
-                    if (!declaracionLink) return
-                    try {
-                      await navigator.clipboard.writeText(declaracionLink)
-                      alert("Link de DJ copiado.")
-                    } catch {
-                      alert("No se pudo copiar el link de DJ.")
-                    }
-                  }}
-                  disabled={!declaracionLink}
-                  className="gap-1.5"
-                >
-                  <CopyIcon className="h-4 w-4" />
-                  Copiar link DJ
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => declaracionLink && window.open(declaracionLink, "_blank", "noopener,noreferrer")}
-                  disabled={!declaracionLink}
-                  className="gap-1.5"
-                >
-                  <ExternalLinkIcon className="h-4 w-4" />
-                  Abrir link DJ
+                    ) : (
+                      <>
+                        <MessageCircleIcon className="h-4 w-4" />
+                        Reenviar DJ
+                      </>
+                    )}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setDeclaracionViewOpen(true)}
-                  disabled={!declaracionRespuestaId}
+                  disabled={!declaracionCompletada}
                 >
                   Ver DJ
                 </Button>

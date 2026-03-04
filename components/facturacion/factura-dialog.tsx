@@ -98,6 +98,7 @@ export function FacturaDialog({ open, onOpenChange, factura, facturaId, clienteN
     const message = renderTemplate(template, {
       cliente: clienteNombre?.trim() || "Clienta",
       clienta: clienteNombre?.trim() || "Clienta",
+      de_parte_de: "",
       link: shareUrl,
     })
     if (navigator.share) {

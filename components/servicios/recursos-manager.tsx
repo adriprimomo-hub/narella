@@ -4,6 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 import { PencilIcon, PlusIcon, Trash2Icon, XIcon, CheckIcon } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -121,7 +122,7 @@ export function RecursosManager({ onClose }: RecursosManagerProps) {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Eliminar recurso?")) return
+    if (!(await showSystemConfirm("Eliminar recurso?"))) return
     setLoading(true)
     setError(null)
 

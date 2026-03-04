@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ServicioForm } from "./servicio-form"
 import { PencilIcon, Trash2Icon, SearchIcon, PlusIcon } from "lucide-react"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const SERVICIOS_PAGE_SIZE = 60
@@ -108,7 +109,7 @@ export function ServiciosList() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Eliminar servicio?")) return
+    if (!(await showSystemConfirm("Eliminar servicio?"))) return
     await fetch(`/api/servicios/${id}`, { method: "DELETE" })
     mutate()
   }

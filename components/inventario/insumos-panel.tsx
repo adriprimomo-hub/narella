@@ -12,6 +12,7 @@ import { PencilIcon, PlusIcon, SearchIcon, Trash2Icon } from "lucide-react"
 import { UserBadge } from "../ui/user-badge"
 import type { Empleada } from "../empleadas/types"
 import { formatDateTime } from "@/lib/date-format"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 type Insumo = {
   id: string
@@ -106,7 +107,7 @@ export function InsumosPanel() {
 
   const handleDeleteInsumo = async (id: string) => {
     if (!isAdmin) return
-    if (!confirm("Eliminar insumo?")) return
+    if (!(await showSystemConfirm("Eliminar insumo?"))) return
     const res = await fetch(`/api/insumos/${id}`, { method: "DELETE" })
     if (!res.ok) {
       const data = await res.json().catch(() => null)

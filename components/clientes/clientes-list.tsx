@@ -10,6 +10,7 @@ import { ClienteForm } from "./cliente-form"
 import { ClienteHistorialModal } from "./cliente-historial"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PencilIcon, Trash2Icon, PlusIcon, SearchIcon } from "lucide-react"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const CLIENTES_PAGE_SIZE = 60
@@ -55,7 +56,7 @@ export function ClientesList() {
 
   const handleDelete = async (id: string) => {
     if (!isAdmin) return
-    if (!confirm("Eliminar cliente?")) return
+    if (!(await showSystemConfirm("Eliminar cliente?"))) return
     await fetch(`/api/clientes/${id}`, { method: "DELETE" })
     mutate()
   }

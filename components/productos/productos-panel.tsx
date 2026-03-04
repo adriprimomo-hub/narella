@@ -15,6 +15,7 @@ import type { Cliente } from "../clientes/clientes-list"
 import { formatDateTime } from "@/lib/date-format"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { FacturandoDialog } from "@/components/facturacion/facturando-dialog"
+import { showSystemConfirm } from "@/lib/system-dialogs"
 import { normalizeRole } from "@/lib/roles"
 
 type ComisionTipo = "porcentaje" | "monto"
@@ -178,7 +179,7 @@ export function ProductosPanel() {
 
   const handleDeleteProducto = async (id: string) => {
     if (!isAdmin) return
-    if (!confirm("Eliminar producto?")) return
+    if (!(await showSystemConfirm("Eliminar producto?"))) return
     const res = await fetch(`/api/productos/${id}`, { method: "DELETE" })
     if (!res.ok) {
       const data = await res.json().catch(() => null)

@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import "./globals.css"
 import { font_mono, font_sans } from "./fonts"
 import { ThemeProvider } from "@/components/theme-provider"
+import { SystemDialogsHost } from "@/components/ui/system-dialogs-host"
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body className={`${font_sans.variable} ${font_mono.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false} disableTransitionOnChange>
           {children}
+          <SystemDialogsHost />
           <Toaster />
         </ThemeProvider>
       </body>
