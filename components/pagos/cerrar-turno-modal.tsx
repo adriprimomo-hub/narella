@@ -546,6 +546,14 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
                   <p className="text-sm font-medium">
                     Declaración jurada{declaracionPlantillaNombre ? ` · ${declaracionPlantillaNombre}` : ""}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Estado: {declaracionEnviada ? "Enviada" : "Sin enviar"} ·{" "}
+                    {declaracionCompletada
+                      ? "Completada"
+                      : declaracionEnviada
+                        ? declaracionEstadoLabel(declaracionEstadoActual)
+                        : "Sin completar"}
+                  </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
