@@ -11,6 +11,9 @@ import {
   uploadTurnoWorkPhotoToStorage,
 } from "@/lib/supabase/storage"
 import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import { resolveAppUrl } from "@/lib/url"
+import { sanitizePhoneNumber } from "@/lib/whatsapp"
+import { renderMessageTemplate, resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -29,6 +32,7 @@ type TurnoFotoUpdateResult = {
 }
 
 const MAX_TURNO_WORK_PHOTO_BYTES = 5 * 1024 * 1024
+const DEFAULT_DECLARACION_LINK_TTL_HOURS = 72
 
 const normalizeFotoTrabajoInput = (value: unknown) => {
   if (value === undefined) {
@@ -66,6 +70,187 @@ const validateFotoTrabajoData = (imageData: string) => {
     return { error: "La foto supera el tamaño máximo permitido (5 MB).", status: 400 }
   }
   return { error: null as string | null, status: 200 }
+}
+
+const isMissingTableError = (error: any, table: string) => {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  if (code === "42P01" || code === "PGRST205") return true
+  return message.includes(`public.${table}`.toLowerCase()) && message.includes("schema cache")
+}
+
+const isMissingColumnError = (error: any, column = "") => {
+  const message = String(error?.message || "").toLowerCase()
+  const code = String(error?.code || "")
+  const normalizedColumn = String(column || "").toLowerCase()
+  if (code === "42703" || code === "PGRST204") {
+    if (!normalizedColumn) return true
+    return message.includes(normalizedColumn)
+  }
+  if (!normalizedColumn) {
+    return message.includes("column") && message.includes("does not exist")
+  }
+  return message.includes("column") && message.includes(normalizedColumn)
+}
+
+const isLinkExpired = (value?: string | null) => {
+  if (!value) return false
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return false
+  return date.getTime() <= Date.now()
+}
+
+const formatFechaHoraDeclaracion = (fechaIso?: string | null) => {
+  const date = new Date(String(fechaIso || ""))
+  if (!Number.isFinite(date.getTime())) {
+    return { fecha: "", hora: "" }
+  }
+  return {
+    fecha: date.toLocaleDateString("es-AR"),
+    hora: date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+  }
+}
+
+const parseDeclaracionLinkTtlHours = () => {
+  const raw = Number.parseInt(process.env.DECLARACION_JURADA_LINK_TTL_HOURS || "", 10)
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_DECLARACION_LINK_TTL_HOURS
+  return Math.min(raw, 24 * 30)
+}
+
+const buildDeclaracionExpiry = () =>
+  new Date(Date.now() + parseDeclaracionLinkTtlHours() * 60 * 60 * 1000).toISOString()
+
+const ensureDeclaracionTurnoPayload = async (args: {
+  db: any
+  turno: any
+  tenantId: string
+  request: Request
+}): Promise<Record<string, unknown> | null> => {
+  const { db, turno, tenantId, request } = args
+  const plantillaId = String(turno?.declaracion_jurada_plantilla_id || "").trim()
+  if (!plantillaId) return null
+
+  const { data: plantilla, error: plantillaError } = await db
+    .from("declaraciones_juradas_plantillas")
+    .select("id, nombre, activa")
+    .eq("id", plantillaId)
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+  if (plantillaError) {
+    if (isMissingTableError(plantillaError, "declaraciones_juradas_plantillas")) return null
+    throw new Error(plantillaError.message || "No se pudo validar la plantilla de declaración jurada")
+  }
+  if (!plantilla || plantilla.activa === false) return null
+
+  const { data: existingRows, error: existingError } = await db
+    .from("declaraciones_juradas_respuestas")
+    .select("id, token, estado, link_expires_at")
+    .eq("usuario_id", tenantId)
+    .eq("turno_id", turno.id)
+    .eq("plantilla_id", plantilla.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+  if (existingError) {
+    if (isMissingTableError(existingError, "declaraciones_juradas_respuestas")) return null
+    throw new Error(existingError.message || "No se pudo buscar declaraciones juradas existentes")
+  }
+
+  const current = Array.isArray(existingRows) ? existingRows[0] : null
+  let respuesta = current
+  if (current?.estado === "pendiente" && isLinkExpired(current?.link_expires_at)) {
+    await db
+      .from("declaraciones_juradas_respuestas")
+      .update({ estado: "expirada", updated_at: new Date().toISOString() })
+      .eq("id", current.id)
+      .eq("estado", "pendiente")
+    respuesta = null
+  }
+
+  if (!respuesta || respuesta.estado === "expirada" || respuesta.estado === "cancelada") {
+    const nowIso = new Date().toISOString()
+    const { data: created, error: createError } = await db
+      .from("declaraciones_juradas_respuestas")
+      .insert([
+        {
+          usuario_id: tenantId,
+          plantilla_id: plantilla.id,
+          turno_id: turno.id,
+          cliente_id: turno.cliente_id || null,
+          estado: "pendiente",
+          link_expires_at: buildDeclaracionExpiry(),
+          created_by: turno.actualizado_por || turno.creado_por || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+      ])
+      .select("id, token, estado, link_expires_at")
+      .single()
+
+    if (createError) throw new Error(createError.message || "No se pudo crear la declaración jurada para el turno")
+    respuesta = created
+  }
+
+  if (!respuesta) return null
+
+  const { error: attachError } = await db
+    .from("turnos")
+    .update({
+      declaracion_jurada_respuesta_id: respuesta.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", turno.id)
+    .eq("usuario_id", tenantId)
+  if (attachError && !isMissingColumnError(attachError)) {
+    throw new Error(attachError.message || "No se pudo asociar la declaración jurada al turno")
+  }
+
+  const { data: cliente } = await db
+    .from("clientes")
+    .select("nombre, apellido, telefono")
+    .eq("id", turno.cliente_id)
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+  const { data: servicio } = await db
+    .from("servicios")
+    .select("nombre")
+    .eq("id", turno.servicio_final_id || turno.servicio_id)
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+
+  const requestUrl = new URL(request.url)
+  const baseUrl = resolveAppUrl({ headers: request.headers, fallbackOrigin: requestUrl.origin })
+  const link = `${baseUrl}/declaracion/${respuesta.token}`
+
+  const clienteNombre = `${cliente?.nombre || ""} ${cliente?.apellido || ""}`.trim() || "Clienta"
+  const servicioNombre = servicio?.nombre || "servicio"
+  const telefonoRaw = String(cliente?.telefono || "").trim()
+  const telefonoSanitizado = sanitizePhoneNumber(telefonoRaw)
+  const { fecha, hora } = formatFechaHoraDeclaracion(turno.fecha_inicio)
+  const templates = await resolveTenantMensajeriaTemplates(db, tenantId)
+  const mensaje = renderMessageTemplate(templates.declaraciones_juradas, {
+    clienta: clienteNombre,
+    cliente: clienteNombre,
+    cliente_nombre: cliente?.nombre || clienteNombre,
+    servicio: servicioNombre,
+    fecha,
+    hora,
+    link,
+  })
+
+  return {
+    id: respuesta.id,
+    estado: respuesta.estado,
+    token: respuesta.token,
+    link,
+    plantilla_id: plantilla.id,
+    plantilla_nombre: plantilla.nombre,
+    cliente_telefono: telefonoRaw || null,
+    whatsapp_url:
+      telefonoSanitizado && telefonoSanitizado.length >= 8
+        ? `https://wa.me/${telefonoSanitizado}?text=${encodeURIComponent(mensaje)}`
+        : null,
+    mensaje,
+  }
 }
 
 const buildTurnoFotoUpdatePayload = async ({
@@ -156,6 +341,7 @@ const turnoUpdateSchema = z
     empleada_final_id: z.string().min(1).optional(),
     servicio_id: z.string().min(1).optional(),
     servicio_final_id: z.string().min(1).optional(),
+    declaracion_jurada_plantilla_id: z.string().optional().nullable(),
     estado: z.string().min(1).optional(),
     servicios_agregados: z.array(z.any()).optional(),
     productos_agregados: z.array(z.any()).optional(),
@@ -265,7 +451,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .from("turnos")
     .select("*")
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (currentError || !currentTurno) {
@@ -295,7 +481,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         .from("servicios")
         .select("id, nombre, empleadas_habilitadas")
         .eq("id", updates.servicio_final_id)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .maybeSingle()
 
       if (servicioError || !servicio) {
@@ -400,11 +586,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .from("turnos")
       .update(filtered)
       .eq("id", id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .select()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data[0])
+    const updatedTurno = data?.[0]
+    let declaracionPayload: Record<string, unknown> | null = null
+    const inicioTurno = updates.estado === "en_curso" && currentTurno.estado === "pendiente"
+    if (inicioTurno && updatedTurno) {
+      declaracionPayload = await ensureDeclaracionTurnoPayload({
+        db,
+        turno: updatedTurno,
+        tenantId,
+        request,
+      })
+    }
+    return NextResponse.json({
+      ...updatedTurno,
+      declaracion_jurada: declaracionPayload,
+    })
   }
 
   // Admin: full update path
@@ -436,7 +636,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .from("empleadas")
     .select("id, nombre, apellido, horarios, activo")
     .eq("id", updatedEmpleada)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (staffError || !staff) {
@@ -460,7 +660,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .from("servicios")
     .select("id, nombre, empleadas_habilitadas")
     .eq("id", updatedServicio)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .maybeSingle()
 
   if (servicioError || !servicio) {
@@ -477,7 +677,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { data: overlapping, error: overlapError } = await db
     .from("turnos")
     .select("id, estado, confirmacion_estado")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("empleada_id", updatedEmpleada)
     .neq("id", id)
     .lt("fecha_inicio", fecha_fin)
@@ -497,9 +697,45 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     )
   }
 
+  const declaracionPayload = (updates as any).declaracion_jurada_plantilla_id
+  let declaracionPlantillaId = currentTurno.declaracion_jurada_plantilla_id || null
+  if (declaracionPayload !== undefined) {
+    const nextDeclaracionId = String(declaracionPayload || "").trim()
+    if (!nextDeclaracionId) {
+      declaracionPlantillaId = null
+    } else {
+      const { data: plantilla, error: plantillaError } = await db
+        .from("declaraciones_juradas_plantillas")
+        .select("id, activa")
+        .eq("id", nextDeclaracionId)
+        .eq("usuario_id", tenantId)
+        .maybeSingle()
+
+      if (plantillaError) {
+        if (isMissingTableError(plantillaError, "declaraciones_juradas_plantillas")) {
+          return NextResponse.json({ error: "Falta crear la tabla de declaraciones juradas." }, { status: 500 })
+        }
+        return NextResponse.json({ error: plantillaError.message }, { status: 500 })
+      }
+      if (!plantilla) {
+        return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
+      }
+      if (plantilla.activa === false) {
+        return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
+      }
+      declaracionPlantillaId = plantilla.id
+    }
+
+    const plantillaChanged = declaracionPlantillaId !== (currentTurno.declaracion_jurada_plantilla_id || null)
+    updates.declaracion_jurada_plantilla_id = declaracionPlantillaId
+    if (plantillaChanged) {
+      updates.declaracion_jurada_respuesta_id = null
+    }
+  }
+
   if (!skipRecursosCheck) {
     const intervaloNuevo = { startMs: fechaInicioDate.getTime(), endMs: new Date(fecha_fin).getTime() }
-    const conflictos = await calcularConflictosRecursos(db, user.id, updatedServicio, intervaloNuevo, [id])
+    const conflictos = await calcularConflictosRecursos(db, tenantId, updatedServicio, intervaloNuevo, [id])
     if (conflictos.length > 0) {
       return NextResponse.json({ error: "Recursos insuficientes", conflictos }, { status: 409 })
     }
@@ -518,7 +754,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         .from("empleadas")
         .select("id, nombre, apellido")
         .eq("id", updatedFinalId)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
         .single()
       if (finalStaffData) {
         finalStaff = finalStaffData
@@ -589,11 +825,27 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .from("turnos")
     .update(payload)
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data[0])
+  const updatedTurno = data?.[0]
+  let declaracionPayloadResponse: Record<string, unknown> | null = null
+  const estadoPrevio = String(currentTurno.estado || "")
+  const estadoActual = String((updates as any).estado || currentTurno.estado || "")
+  const inicioTurno = estadoPrevio !== "en_curso" && estadoActual === "en_curso"
+  if (inicioTurno && updatedTurno) {
+    declaracionPayloadResponse = await ensureDeclaracionTurnoPayload({
+      db,
+      turno: updatedTurno,
+      tenantId,
+      request,
+    })
+  }
+  return NextResponse.json({
+    ...updatedTurno,
+    declaracion_jurada: declaracionPayloadResponse,
+  })
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -607,7 +859,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const role = await getUserRole(db, user.id)
   if (isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const { error } = await db.from("turnos").delete().eq("id", id).eq("usuario_id", user.id)
+  const tenantId = getTenantId(user) || user.id
+  const { error } = await db.from("turnos").delete().eq("id", id).eq("usuario_id", tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

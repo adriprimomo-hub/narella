@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -41,6 +41,15 @@ type GiftcardsPageResponse = {
   }
 }
 
+const DEFAULT_GIFTCARD_TEMPLATE_SOURCE = "/templates/giftcard-template.pdf"
+
+const toObjectUrl = async (value: string, signal: AbortSignal) => {
+  const response = await fetch(value, { signal })
+  if (!response.ok) throw new Error("No se pudo convertir recurso inline a Blob")
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
 export function GiftcardsPanel() {
   const [page, setPage] = useState(1)
   const { data: giftcardsResponse, mutate } = useSWR<GiftcardsPageResponse>(
@@ -50,13 +59,6 @@ export function GiftcardsPanel() {
   const { data: clientes = [] } = useSWR<Cliente[]>("/api/clientes", fetcher)
   const { data: servicios = [] } = useSWR<Servicio[]>("/api/servicios", fetcher)
   const { data: config } = useSWR<Config>("/api/config", fetcher)
-  const { data: branding } = useSWR<{ data_url?: string | null }>("/api/branding/logo", fetcher)
-  const { data: giftcardTemplate } = useSWR<{ data_url?: string | null; public_url?: string | null }>(
-    "/api/branding/giftcard-template",
-    fetcher,
-  )
-  const giftcardTemplateSource =
-    giftcardTemplate?.data_url || giftcardTemplate?.public_url || "/templates/giftcard-template.pdf"
   const giftcards = Array.isArray(giftcardsResponse?.items) ? giftcardsResponse.items : []
   const pagination = giftcardsResponse?.pagination || {
     page,
@@ -80,8 +82,99 @@ export function GiftcardsPanel() {
   const [facturaOpen, setFacturaOpen] = useState(false)
   const [facturaInfo, setFacturaInfo] = useState<FacturaInfo | null>(null)
   const [facturaId, setFacturaId] = useState<string | null>(null)
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
+  const [giftcardTemplateSource, setGiftcardTemplateSource] = useState<string>(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
+  const logoObjectUrlRef = useRef<string | null>(null)
+  const templateObjectUrlRef = useRef<string | null>(null)
 
   const serviciosMap = useMemo(() => new Map(servicios.map((s) => [s.id, s])), [servicios])
+
+  useEffect(() => {
+    if (!showForm) {
+      setLogoDataUrl(null)
+      setGiftcardTemplateSource(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
+      if (logoObjectUrlRef.current) {
+        URL.revokeObjectURL(logoObjectUrlRef.current)
+        logoObjectUrlRef.current = null
+      }
+      if (templateObjectUrlRef.current) {
+        URL.revokeObjectURL(templateObjectUrlRef.current)
+        templateObjectUrlRef.current = null
+      }
+      return
+    }
+
+    const controller = new AbortController()
+    let active = true
+
+    const loadBranding = async () => {
+      try {
+        const res = await fetch("/api/branding/logo", { signal: controller.signal, cache: "no-store" })
+        if (!res.ok) throw new Error("No se pudo cargar logo de branding")
+        const payload = (await res.json()) as { data_url?: string | null }
+        const raw = String(payload?.data_url || "").trim()
+        if (!raw) {
+          if (active) setLogoDataUrl(null)
+          return
+        }
+        if (raw.startsWith("data:image/")) {
+          const objectUrl = await toObjectUrl(raw, controller.signal)
+          if (!active) {
+            URL.revokeObjectURL(objectUrl)
+            return
+          }
+          if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current)
+          logoObjectUrlRef.current = objectUrl
+          setLogoDataUrl(objectUrl)
+          return
+        }
+        if (active) setLogoDataUrl(raw)
+      } catch {
+        if (active) setLogoDataUrl(null)
+      }
+    }
+
+    const loadTemplate = async () => {
+      try {
+        const res = await fetch("/api/branding/giftcard-template", {
+          signal: controller.signal,
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error("No se pudo cargar plantilla de giftcard")
+        const payload = (await res.json()) as { data_url?: string | null; public_url?: string | null }
+        const inline = String(payload?.data_url || "").trim()
+        const fallback = String(payload?.public_url || "").trim() || DEFAULT_GIFTCARD_TEMPLATE_SOURCE
+
+        if (!inline) {
+          if (active) setGiftcardTemplateSource(fallback)
+          return
+        }
+
+        if (inline.startsWith("data:")) {
+          const objectUrl = await toObjectUrl(inline, controller.signal)
+          if (!active) {
+            URL.revokeObjectURL(objectUrl)
+            return
+          }
+          if (templateObjectUrlRef.current) URL.revokeObjectURL(templateObjectUrlRef.current)
+          templateObjectUrlRef.current = objectUrl
+          setGiftcardTemplateSource(objectUrl)
+          return
+        }
+
+        if (active) setGiftcardTemplateSource(inline)
+      } catch {
+        if (active) setGiftcardTemplateSource(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
+      }
+    }
+
+    void Promise.all([loadBranding(), loadTemplate()])
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [showForm])
 
   const filtered = giftcards.filter((g) => {
     const term = search.toLowerCase()
@@ -279,7 +372,7 @@ export function GiftcardsPanel() {
             clientes={clientes}
             servicios={servicios}
             metodosPago={metodosPago}
-            logoDataUrl={branding?.data_url || null}
+            logoDataUrl={logoDataUrl}
             templateDataUrl={giftcardTemplateSource}
             onSuccess={({ giftcard, imagen_base64, factura, factura_id, factura_pendiente, factura_error }) => {
               mutate()
@@ -308,7 +401,10 @@ export function GiftcardsPanel() {
 
       <GiftcardPreviewDialog
         open={previewOpen}
-        onOpenChange={setPreviewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open)
+          if (!open) setPreviewGiftcard(null)
+        }}
         imageDataUrl={previewGiftcard?.imagen_base64 || null}
         giftcardId={previewGiftcard?.id || null}
         info={

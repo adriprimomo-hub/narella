@@ -1,8 +1,10 @@
 import { resolveAppUrl } from "@/lib/url"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { buildConfirmationTokenInsertPayload, isConfirmationTokenExpired } from "@/lib/confirmacion"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
 import { buildConfirmationMessage, type TurnoWhatsAppData } from "@/lib/twilio"
+import { resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
 import { formatDate } from "@/lib/date-format"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
@@ -28,6 +30,7 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
     if (!user) {
       return Response.json({ error: "No autorizado" }, { status: 401 })
     }
+    const tenantId = getTenantId(user) || user.id
     // Obtener turno con cliente/servicio
     const { data: turno, error: turnoError } = await db
       .from("turnos")
@@ -35,7 +38,7 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
         "*, clientes:cliente_id(nombre, apellido, telefono), servicios:servicio_id(nombre, duracion_minutos, precio)",
       )
       .eq("id", turnoId || resolvedParams.id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
 
     if (turnoError || !turno) {
@@ -65,7 +68,7 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
     if (!token) {
       const { data: createdToken, error: tokenError } = await db
         .from("confirmation_tokens")
-        .insert(buildConfirmationTokenInsertPayload({ turnoId: turno.id, usuarioId: user.id }))
+        .insert(buildConfirmationTokenInsertPayload({ turnoId: turno.id, usuarioId: tenantId }))
         .select("token, expires_at")
         .maybeSingle()
       if (tokenError || !createdToken?.token) {
@@ -98,7 +101,8 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
       linkConfirmacion: confirmLink,
       duracion: String(turno.duracion_minutos || ""),
     }
-    const mensaje = buildConfirmationMessage(turnoData)
+    const templates = await resolveTenantMensajeriaTemplates(db, tenantId)
+    const mensaje = buildConfirmationMessage(turnoData, templates.confirmaciones)
 
     const clienteTelefono = sanitizePhoneNumber(turno.clientes?.telefono || "")
     if (!clienteTelefono || clienteTelefono.length < 8) {
@@ -117,6 +121,7 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
         confirmacion_enviada_at: new Date().toISOString(),
       })
       .eq("id", turno.id)
+      .eq("usuario_id", tenantId)
 
     return Response.json({
       whatsappLink,

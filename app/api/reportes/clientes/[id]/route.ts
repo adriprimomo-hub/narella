@@ -1,13 +1,22 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
+import { normalizeDeclaracionCampos } from "@/lib/declaraciones-juradas"
 
 const isFacturasTableMissingError = (error: any) => {
   const code = String(error?.code || "")
   const message = String(error?.message || "").toLowerCase()
   if (code === "42P01" || code === "PGRST205") return true
   return message.includes("public.facturas") && message.includes("schema cache")
+}
+
+const isMissingTableError = (error: any, table: string) => {
+  const code = String(error?.code || "")
+  const message = String(error?.message || "").toLowerCase()
+  if (code === "42P01" || code === "PGRST205") return true
+  return message.includes(`public.${table}`.toLowerCase()) && message.includes("schema cache")
 }
 
 const isMissingColumnError = (error: any, column: string) => {
@@ -47,9 +56,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user) || user.id
 
   // Obtener info cliente
-  const { data: cliente } = await db.from("clientes").select("*").eq("id", id).eq("usuario_id", user.id).single()
+  const { data: cliente } = await db.from("clientes").select("*").eq("id", id).eq("usuario_id", tenantId).single()
 
   // Obtener historial de turnos
   const { data: turnos, error } = await db
@@ -64,7 +74,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     `,
     )
     .eq("cliente_id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .order("fecha_inicio", { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -74,14 +84,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .from("pagos")
     .select("id, turno_id, monto, metodo_pago, fecha_pago, sena_aplicada_id, monto_sena_aplicada")
     .in("turno_id", turnos?.map((t: any) => t.id) || [])
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   // Pagos grupales (detalle por turno)
   const { data: pagosGrupoItems } = await db
     .from("pago_grupo_items")
     .select("id, turno_id, monto, pago_grupo_id")
     .in("turno_id", turnos?.map((t: any) => t.id) || [])
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const pagosGrupoIds = (pagosGrupoItems || []).map((p: any) => p.pago_grupo_id).filter(Boolean)
   const { data: pagosGrupos } = pagosGrupoIds.length
@@ -89,7 +99,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         .from("pagos_grupos")
         .select("id, metodo_pago, fecha_pago")
         .in("id", pagosGrupoIds)
-        .eq("usuario_id", user.id)
+        .eq("usuario_id", tenantId)
     : { data: [] }
 
   const pagosGrupoMap = new Map<string, any>((pagosGrupos || []).map((p: any) => [p.id, p]))
@@ -107,17 +117,56 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       es_grupal: true,
     })
   })
+  const turnoIds = turnos?.map((t: any) => t.id) || []
+  let declaracionesData: any[] = []
+  if (turnoIds.length) {
+    const { data, error: declaracionesError } = await db
+      .from("declaraciones_juradas_respuestas")
+      .select(
+        "id, turno_id, estado, submitted_at, firma_data_url, respuestas, created_at, plantilla:plantilla_id(id, nombre, campos)",
+      )
+      .in("turno_id", turnoIds)
+      .eq("usuario_id", tenantId)
+      .order("created_at", { ascending: false })
+
+    if (declaracionesError && !isMissingTableError(declaracionesError, "declaraciones_juradas_respuestas")) {
+      return NextResponse.json({ error: declaracionesError.message }, { status: 500 })
+    }
+    declaracionesData = Array.isArray(data) ? data : []
+  }
+
+  const declaracionPorTurno = new Map<string, any>()
+  declaracionesData.forEach((item: any) => {
+    const key = String(item?.turno_id || "")
+    if (!key || declaracionPorTurno.has(key)) return
+    declaracionPorTurno.set(key, {
+      id: item.id,
+      estado: item.estado || "pendiente",
+      submitted_at: item.submitted_at || null,
+      firma_data_url: item.firma_data_url || null,
+      respuestas: item.respuestas || {},
+      plantilla: item.plantilla
+        ? {
+            id: item.plantilla.id,
+            nombre: item.plantilla.nombre,
+            campos: normalizeDeclaracionCampos(item.plantilla.campos),
+          }
+        : null,
+    })
+  })
+
   const historialEnriquecido =
     turnos?.map((t: any) => ({
       ...stripTurnoPhoto(t),
       pago: pagosPorTurno.get(t.id) || null,
+      declaracion_jurada: declaracionPorTurno.get(t.id) || null,
     })) || []
 
   // Obtener productos vendidos a la clienta
   const { data: ventasMov, error: ventasMovError } = await db
     .from("producto_movimientos")
     .select("id, producto_id, cantidad, precio_unitario, metodo_pago, nota, created_at, empleada_id, productos:producto_id(nombre)")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("cliente_id", id)
     .eq("tipo", "venta")
     .order("created_at", { ascending: false })
@@ -129,7 +178,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     db
       .from("facturas")
       .select("id, tipo, estado, numero, punto_venta, cae, cae_vto, fecha, total, created_at, cliente_id")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .eq("cliente_id", id)
 
   let { data: facturas, error: facturasError } = await buildFacturasQuery().order("fecha", { ascending: false })

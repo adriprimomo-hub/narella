@@ -29,6 +29,19 @@ const configSchema = z
         }),
       )
       .optional(),
+    factura_logo_url: z.string().optional().nullable(),
+    factura_leyenda: z.string().optional().nullable(),
+    factura_leyenda_footer: z.string().optional().nullable(),
+    factura_emisor_nombre: z.string().optional().nullable(),
+    factura_emisor_domicilio: z.string().optional().nullable(),
+    factura_emisor_telefono: z.string().optional().nullable(),
+    factura_emisor_email: z.string().optional().nullable(),
+    wa_template_confirmaciones: z.string().optional().nullable(),
+    wa_template_facturas_giftcards: z.string().optional().nullable(),
+    wa_template_liquidaciones: z.string().optional().nullable(),
+    wa_template_servicios_vencidos: z.string().optional().nullable(),
+    wa_template_declaraciones_juradas: z.string().optional().nullable(),
+    giftcard_template_data_url: z.string().optional().nullable(),
   })
   .passthrough()
 
@@ -69,6 +82,22 @@ const USER_CONFIG_SELECT_FALLBACK = [
   "updated_at",
 ].join(", ")
 
+const CONFIG_SELECT_FULL = [
+  "id",
+  "usuario_id",
+  "horario_local",
+  "wa_template_confirmaciones",
+  "wa_template_facturas_giftcards",
+  "wa_template_liquidaciones",
+  "wa_template_servicios_vencidos",
+  "wa_template_declaraciones_juradas",
+  "giftcard_template_data_url",
+  "created_at",
+  "updated_at",
+].join(", ")
+
+const CONFIG_SELECT_FALLBACK = ["id", "usuario_id", "horario_local", "created_at", "updated_at"].join(", ")
+
 const sanitizeUsuario = (value: any) => {
   if (!value) return value
   const {
@@ -107,11 +136,34 @@ const isMissingColumnError = (error: any) => {
   return message.includes("column") && (message.includes("does not exist") || message.includes("schema cache"))
 }
 
+const normalizeNullableText = (value: unknown) => {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const cleaned = String(value).trim()
+  return cleaned.length > 0 ? cleaned : null
+}
+
 const getUsuarioConfigRow = async (db: any, userId: string) => {
   const full = await db.from("usuarios").select(USER_CONFIG_SELECT_FULL).eq("id", userId).maybeSingle()
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
   return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
+}
+
+const getConfiguracionRow = async (db: any, tenantId: string) => {
+  const full = await db.from("configuracion").select(CONFIG_SELECT_FULL).eq("usuario_id", tenantId).maybeSingle()
+  if (!full.error) {
+    return { data: full.data, error: full.error, supportsExtendedColumns: true }
+  }
+  if (!isMissingColumnError(full.error)) {
+    return { data: full.data, error: full.error, supportsExtendedColumns: true }
+  }
+  const fallback = await db.from("configuracion").select(CONFIG_SELECT_FALLBACK).eq("usuario_id", tenantId).maybeSingle()
+  return {
+    data: fallback.data,
+    error: fallback.error,
+    supportsExtendedColumns: false,
+  }
 }
 
 const normalizeHorarioLocal = (items: any): HorarioLocal[] => {
@@ -142,11 +194,7 @@ export async function GET() {
     return NextResponse.json({ error: userError.message }, { status: 500 })
   }
 
-  const { data: configLocal, error: configLocalError } = await db
-    .from("configuracion")
-    .select("horario_local")
-    .eq("usuario_id", tenantId)
-    .maybeSingle()
+  const { data: configLocal, error: configLocalError } = await getConfiguracionRow(db, tenantId)
   if (configLocalError && !isMissingTableError(configLocalError, "configuracion")) {
     return NextResponse.json({ error: configLocalError.message }, { status: 500 })
   }
@@ -186,7 +234,17 @@ export async function GET() {
 
   const metodosPago = mapMetodosPago(metodos as MetodoPagoRow[] | null | undefined)
   return NextResponse.json(
-    { ...usuarioNormalizado, metodos_pago: metodosPago, metodos_pago_config: metodos || [] },
+    {
+      ...usuarioNormalizado,
+      metodos_pago: metodosPago,
+      metodos_pago_config: metodos || [],
+      wa_template_confirmaciones: configLocal?.wa_template_confirmaciones || null,
+      wa_template_facturas_giftcards: configLocal?.wa_template_facturas_giftcards || null,
+      wa_template_liquidaciones: configLocal?.wa_template_liquidaciones || null,
+      wa_template_servicios_vencidos: configLocal?.wa_template_servicios_vencidos || null,
+      wa_template_declaraciones_juradas: configLocal?.wa_template_declaraciones_juradas || null,
+      giftcard_template_data_url: configLocal?.giftcard_template_data_url || null,
+    },
     { headers: { "Cache-Control": "no-store" } },
   )
 }
@@ -205,33 +263,90 @@ export async function PUT(request: Request) {
   const tenantId = getTenantId(user) || user.id
   const { data: body, response: validationResponse } = await validateBody(request, configSchema)
   if (validationResponse) return validationResponse
-  const { metodos_pago_config: metodosPayload, metodos_pago: _legacyMetodos, horario_local: horarioPayload } = body || {}
+  const {
+    metodos_pago_config: metodosPayload,
+    metodos_pago: _legacyMetodos,
+    horario_local: horarioPayload,
+    factura_logo_url,
+    factura_leyenda,
+    factura_leyenda_footer,
+    factura_emisor_nombre,
+    factura_emisor_domicilio,
+    factura_emisor_telefono,
+    factura_emisor_email,
+    wa_template_confirmaciones,
+    wa_template_facturas_giftcards,
+    wa_template_liquidaciones,
+    wa_template_servicios_vencidos,
+    wa_template_declaraciones_juradas,
+    giftcard_template_data_url,
+  } = body || {}
 
-  if (Array.isArray(horarioPayload)) {
-    const horarioNormalizado = normalizeHorarioLocal(horarioPayload)
-    const { data: configLocal, error: readConfigError } = await db
-      .from("configuracion")
-      .select("id")
-      .eq("usuario_id", tenantId)
-      .maybeSingle()
+  const { data: usuarioActual } = await getUsuarioConfigRow(db, tenantId)
+  const allowedUsuarioColumns = new Set(Object.keys(usuarioActual || {}))
+  const userUpdatesRaw: Record<string, unknown> = {
+    factura_logo_url: normalizeNullableText(factura_logo_url),
+    factura_leyenda: normalizeNullableText(factura_leyenda),
+    factura_leyenda_footer: normalizeNullableText(factura_leyenda_footer),
+    factura_emisor_nombre: normalizeNullableText(factura_emisor_nombre),
+    factura_emisor_domicilio: normalizeNullableText(factura_emisor_domicilio),
+    factura_emisor_telefono: normalizeNullableText(factura_emisor_telefono),
+    factura_emisor_email: normalizeNullableText(factura_emisor_email),
+  }
 
-    if (readConfigError && !isMissingTableError(readConfigError, "configuracion")) {
-      return NextResponse.json({ error: readConfigError.message }, { status: 500 })
+  const userUpdates: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(userUpdatesRaw)) {
+    if (value !== undefined && allowedUsuarioColumns.has(key)) {
+      userUpdates[key] = value
     }
+  }
+  if (Object.keys(userUpdates).length > 0) {
+    if (allowedUsuarioColumns.has("updated_at")) {
+      userUpdates.updated_at = new Date()
+    }
+    const { error: updateUserError } = await db.from("usuarios").update(userUpdates).eq("id", tenantId)
+    if (updateUserError) return NextResponse.json({ error: updateUserError.message }, { status: 500 })
+  }
 
-    if (configLocal?.id) {
-      const { error: updateError } = await db
-        .from("configuracion")
-        .update({ horario_local: horarioNormalizado, updated_at: new Date() })
-        .eq("id", configLocal.id)
+  const { data: configLocalActual, error: readConfigError, supportsExtendedColumns } = await getConfiguracionRow(db, tenantId)
+  if (readConfigError && !isMissingTableError(readConfigError, "configuracion")) {
+    return NextResponse.json({ error: readConfigError.message }, { status: 500 })
+  }
+
+  const configPayloadRaw: Record<string, unknown> = {}
+  if (Array.isArray(horarioPayload)) {
+    configPayloadRaw.horario_local = normalizeHorarioLocal(horarioPayload)
+  }
+  if (supportsExtendedColumns) {
+    configPayloadRaw.wa_template_confirmaciones = normalizeNullableText(wa_template_confirmaciones)
+    configPayloadRaw.wa_template_facturas_giftcards = normalizeNullableText(wa_template_facturas_giftcards)
+    configPayloadRaw.wa_template_liquidaciones = normalizeNullableText(wa_template_liquidaciones)
+    configPayloadRaw.wa_template_servicios_vencidos = normalizeNullableText(wa_template_servicios_vencidos)
+    configPayloadRaw.wa_template_declaraciones_juradas = normalizeNullableText(wa_template_declaraciones_juradas)
+    configPayloadRaw.giftcard_template_data_url = normalizeNullableText(giftcard_template_data_url)
+  }
+
+  const configPayload: Record<string, unknown> = {}
+  const allowedConfigColumns = new Set(Object.keys(configLocalActual || {}))
+  Object.entries(configPayloadRaw).forEach(([key, value]) => {
+    if (value === undefined) return
+    if (!configLocalActual || allowedConfigColumns.size === 0 || allowedConfigColumns.has(key)) {
+      configPayload[key] = value
+    }
+  })
+
+  if (Object.keys(configPayload).length > 0 || !configLocalActual?.id) {
+    if (configLocalActual?.id) {
+      const updatePayload = { ...configPayload } as Record<string, unknown>
+      if (allowedConfigColumns.has("updated_at")) updatePayload.updated_at = new Date()
+      const { error: updateError } = await db.from("configuracion").update(updatePayload).eq("id", configLocalActual.id)
       if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
     } else {
-      const { error: insertError } = await db.from("configuracion").insert([
-        {
-          usuario_id: tenantId,
-          horario_local: horarioNormalizado,
-        },
-      ])
+      const insertPayload = {
+        usuario_id: tenantId,
+        ...configPayload,
+      } as Record<string, unknown>
+      const { error: insertError } = await db.from("configuracion").insert([insertPayload])
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
   }
@@ -264,16 +379,18 @@ export async function PUT(request: Request) {
 
   const { data: usuarioRefrescado } = await getUsuarioConfigRow(db, tenantId)
   const { data: metodos } = await db.from("metodos_pago_config").select("*").order("created_at", { ascending: true })
-  const { data: configLocalRefrescada } = await db
-    .from("configuracion")
-    .select("horario_local")
-    .eq("usuario_id", tenantId)
-    .maybeSingle()
+  const { data: configLocalRefrescada } = await getConfiguracionRow(db, tenantId)
 
   return NextResponse.json({
     ...sanitizeUsuario(usuarioRefrescado),
     horario_local: normalizeHorarioLocal(configLocalRefrescada?.horario_local),
     metodos_pago: mapMetodosPago(metodos as MetodoPagoRow[] | null | undefined),
     metodos_pago_config: metodos || [],
+    wa_template_confirmaciones: configLocalRefrescada?.wa_template_confirmaciones || null,
+    wa_template_facturas_giftcards: configLocalRefrescada?.wa_template_facturas_giftcards || null,
+    wa_template_liquidaciones: configLocalRefrescada?.wa_template_liquidaciones || null,
+    wa_template_servicios_vencidos: configLocalRefrescada?.wa_template_servicios_vencidos || null,
+    wa_template_declaraciones_juradas: configLocalRefrescada?.wa_template_declaraciones_juradas || null,
+    giftcard_template_data_url: configLocalRefrescada?.giftcard_template_data_url || null,
   })
 }

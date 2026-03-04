@@ -47,6 +47,7 @@ type Giftcard = {
 }
 
 type Config = { metodos_pago_config?: { nombre: string }[] }
+type DeclaracionPlantilla = { id: string; nombre: string; activa?: boolean | null }
 
 type SimultaneoItem = {
   id: string
@@ -109,6 +110,7 @@ export function TurnoForm({
     duracion_minutos: turno?.duracion_minutos ?? "",
     observaciones: turno?.observaciones || "",
     empleada_id: turno?.empleada_id || initialEmpleadaId || "",
+    declaracion_jurada_plantilla_id: turno?.declaracion_jurada_plantilla_id || "",
   })
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -217,6 +219,10 @@ export function TurnoForm({
   const hasSenas = senasParaDialog.length > 0
 
   const { data: config } = useSWR<Config>("/api/config", fetcher)
+  const { data: declaracionesPlantillas = [] } = useSWR<DeclaracionPlantilla[]>(
+    "/api/declaraciones-juradas/plantillas?active=1",
+    fetcher,
+  )
 
   const metodosPagoList = useMemo(() => {
     const normalizados = Array.isArray(config?.metodos_pago_config)
@@ -257,6 +263,7 @@ export function TurnoForm({
         duracion_minutos: turno.duracion_minutos,
         observaciones: turno.observaciones || "",
         empleada_id: turno.empleada_id || "",
+        declaracion_jurada_plantilla_id: turno.declaracion_jurada_plantilla_id || "",
       })
       setDuracionEditadaManualmente(false)
       setSimultaneos([])
@@ -269,6 +276,7 @@ export function TurnoForm({
           ...prev,
           fecha_inicio: nextFecha,
           empleada_id: nextEmpleada,
+          declaracion_jurada_plantilla_id: prev.declaracion_jurada_plantilla_id,
         }
       })
       setDuracionEditadaManualmente(false)
@@ -712,6 +720,7 @@ export function TurnoForm({
         ? {
             cliente_id: formData.cliente_id,
             fecha_inicio: startDate.toISOString(),
+            declaracion_jurada_plantilla_id: formData.declaracion_jurada_plantilla_id || null,
             turnos: items.map((item) => ({
               servicio_id: item.servicio_id,
               empleada_id: item.empleada_id,
@@ -726,6 +735,7 @@ export function TurnoForm({
             fecha_inicio: startDate.toISOString(),
             duracion_minutos: Number.parseInt(formData.duracion_minutos.toString()),
             observaciones: formData.observaciones,
+            declaracion_jurada_plantilla_id: formData.declaracion_jurada_plantilla_id || null,
           }
 
       if (skipRecursosCheck) {
@@ -758,6 +768,7 @@ export function TurnoForm({
           duracion_minutos: "",
           observaciones: "",
           empleada_id: "",
+          declaracion_jurada_plantilla_id: "",
         })
         setDuracionEditadaManualmente(false)
         setSimultaneos([])
@@ -928,6 +939,36 @@ export function TurnoForm({
               </div>
             )}
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Declaración jurada (opcional)</label>
+          <Select
+            value={formData.declaracion_jurada_plantilla_id || "none"}
+            onValueChange={(value) => {
+              setFormData((prev) => ({
+                ...prev,
+                declaracion_jurada_plantilla_id: value === "none" ? "" : value,
+              }))
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Sin declaración jurada" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin declaración jurada</SelectItem>
+              {declaracionesPlantillas.map((plantilla) => (
+                <SelectItem key={plantilla.id} value={plantilla.id}>
+                  {plantilla.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {formData.declaracion_jurada_plantilla_id && (
+            <p className="text-xs text-muted-foreground">
+              Se enviará un link para completar la declaración al iniciar el turno.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

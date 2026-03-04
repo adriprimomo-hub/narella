@@ -17,6 +17,7 @@ const createTurnoSchema = z.object({
   fecha_inicio: z.string().min(1),
   duracion_minutos: z.coerce.number().int().positive(),
   observaciones: z.string().optional().nullable(),
+  declaracion_jurada_plantilla_id: z.string().optional().nullable(),
 })
 
 const estaDentroDeHorario = (horarios: Horario[] | null, inicio: Date, duracionMinutos: number) => {
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
   const username = user.username || (user.user_metadata as any)?.username || user.id
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const fechaInicio = url.searchParams.get("fecha_inicio")
@@ -81,9 +83,11 @@ export async function GET(request: Request) {
       servicios:servicio_id (*),
       servicio_final:servicio_final_id (*),
       empleadas:empleada_id (*),
-      empleada_final:empleada_final_id (*)
+      empleada_final:empleada_final_id (*),
+      declaracion_jurada_plantilla:declaracion_jurada_plantilla_id (id, nombre, activa),
+      declaracion_jurada_respuesta:declaracion_jurada_respuesta_id (id, estado, submitted_at)
     `)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (fechaInicio) query = query.gte("fecha_inicio", fechaInicio)
   if (fechaFin) query = query.lte("fecha_inicio", fechaFin)
@@ -151,7 +155,15 @@ export async function POST(request: Request) {
   const tenantId = getTenantId(user) || user.id
   const { data: payload, response: validationResponse } = await validateBody(request, createTurnoSchema)
   if (validationResponse) return validationResponse
-  const { cliente_id, servicio_id, empleada_id, fecha_inicio, duracion_minutos, observaciones } = payload
+  const {
+    cliente_id,
+    servicio_id,
+    empleada_id,
+    fecha_inicio,
+    duracion_minutos,
+    observaciones,
+    declaracion_jurada_plantilla_id,
+  } = payload
 
   const fechaInicioDate = new Date(fecha_inicio)
   const duracion = Number.parseInt(String(duracion_minutos), 10)
@@ -173,7 +185,7 @@ export async function POST(request: Request) {
     .from("empleadas")
     .select("id, nombre, apellido, horarios, activo")
     .eq("id", empleada_id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (staffError || !staff) {
@@ -197,7 +209,7 @@ export async function POST(request: Request) {
     .from("servicios")
     .select("id, nombre, empleadas_habilitadas")
     .eq("id", servicio_id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .maybeSingle()
 
   if (servicioError || !servicio) {
@@ -214,7 +226,7 @@ export async function POST(request: Request) {
   const { data: overlapping, error: overlapError } = await db
     .from("turnos")
     .select("id, fecha_inicio, fecha_fin, estado, confirmacion_estado")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("empleada_id", empleada_id)
     .lt("fecha_inicio", fecha_fin)
     .gt("fecha_fin", fechaInicioDate.toISOString())
@@ -233,11 +245,32 @@ export async function POST(request: Request) {
     )
   }
 
+  let declaracionPlantillaId: string | null = null
+  if (declaracion_jurada_plantilla_id) {
+    const { data: plantilla, error: plantillaError } = await db
+      .from("declaraciones_juradas_plantillas")
+      .select("id, activa")
+      .eq("id", declaracion_jurada_plantilla_id)
+      .eq("usuario_id", tenantId)
+      .maybeSingle()
+
+    if (plantillaError) {
+      return NextResponse.json({ error: plantillaError.message }, { status: 500 })
+    }
+    if (!plantilla) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
+    }
+    if (plantilla.activa === false) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
+    }
+    declaracionPlantillaId = plantilla.id
+  }
+
   const { data, error } = await db
     .from("turnos")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         creado_por_username: username,
         cliente_id,
         servicio_id,
@@ -251,6 +284,7 @@ export async function POST(request: Request) {
         duracion_minutos: duracion,
         estado: "pendiente",
         observaciones,
+        declaracion_jurada_plantilla_id: declaracionPlantillaId,
         creado_por: user.id,
       },
     ])

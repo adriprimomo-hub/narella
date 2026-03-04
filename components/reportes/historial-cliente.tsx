@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/date-format"
 import { VerTurnoFotoButton } from "@/components/turnos/ver-turno-foto-button"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -76,6 +78,8 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
   const [facturaOpen, setFacturaOpen] = useState(false)
   const [facturaInfo, setFacturaInfo] = useState<FacturaInfo | null>(null)
   const [facturaId, setFacturaId] = useState<string | null>(null)
+  const [declaracionOpen, setDeclaracionOpen] = useState(false)
+  const [declaracionSeleccionada, setDeclaracionSeleccionada] = useState<any | null>(null)
 
   if (!reporte) return <div className="text-center py-8">Cargando...</div>
 
@@ -149,6 +153,7 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
                 <TableHead>Observaciones</TableHead>
                 <TableHead>Pago</TableHead>
                 <TableHead>Foto</TableHead>
+                <TableHead>DJ</TableHead>
                 <TableHead>Estado</TableHead>
               </TableRow>
             </TableHeader>
@@ -199,6 +204,36 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
                   </TableCell>
                   <TableCell className="text-xs">
                     {turno.foto_trabajo_disponible ? <VerTurnoFotoButton turnoId={turno.id} /> : "-"}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {turno.declaracion_jurada ? (
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant={
+                            turno.declaracion_jurada.estado === "completada"
+                              ? "success"
+                              : turno.declaracion_jurada.estado === "pendiente"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {turno.declaracion_jurada.estado || "pendiente"}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setDeclaracionSeleccionada(turno.declaracion_jurada)
+                            setDeclaracionOpen(true)
+                          }}
+                        >
+                          Ver
+                        </Button>
+                      </div>
+                    ) : (
+                      "-"
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={turno.estado === "completado" ? "success" : "neutral"}>
@@ -324,6 +359,77 @@ export function HistorialCliente({ clienteId }: HistorialClienteProps) {
         facturaId={facturaId}
         factura={facturaInfo}
       />
+
+      <Dialog
+        open={declaracionOpen}
+        onOpenChange={(open) => {
+          setDeclaracionOpen(open)
+          if (!open) setDeclaracionSeleccionada(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Declaración jurada
+              {declaracionSeleccionada?.plantilla?.nombre ? ` · ${declaracionSeleccionada.plantilla.nombre}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {declaracionSeleccionada ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={
+                    declaracionSeleccionada.estado === "completada"
+                      ? "success"
+                      : declaracionSeleccionada.estado === "pendiente"
+                        ? "warning"
+                        : "neutral"
+                  }
+                >
+                  {declaracionSeleccionada.estado || "pendiente"}
+                </Badge>
+                {declaracionSeleccionada.submitted_at && (
+                  <span className="text-muted-foreground">
+                    Respondida: {formatDateTime(declaracionSeleccionada.submitted_at)}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                {Object.keys(declaracionSeleccionada.respuestas || {}).length === 0 ? (
+                  <p className="text-muted-foreground">Sin respuestas registradas.</p>
+                ) : (
+                  Object.entries(declaracionSeleccionada.respuestas || {}).map(([key, value]) => {
+                    const campo = Array.isArray(declaracionSeleccionada.plantilla?.campos)
+                      ? declaracionSeleccionada.plantilla.campos.find((item: any) => item.id === key)
+                      : null
+                    return (
+                      <div key={key} className="grid grid-cols-1 gap-1 sm:grid-cols-[220px_1fr]">
+                        <span className="font-medium">{campo?.label || key}</span>
+                        <span className="text-muted-foreground whitespace-pre-wrap">{String(value || "-")}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {declaracionSeleccionada.firma_data_url && (
+                <div className="space-y-1">
+                  <p className="font-medium">Firma</p>
+                  <Image
+                    src={declaracionSeleccionada.firma_data_url}
+                    alt="Firma de la declaración jurada"
+                    width={640}
+                    height={220}
+                    unoptimized
+                    className="max-h-44 w-auto rounded-md border bg-white"
+                  />
+                </div>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

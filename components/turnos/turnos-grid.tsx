@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
-import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
+import {
+  CalendarDaysIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  MessageCircleIcon,
+  PlusIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -147,6 +157,8 @@ export interface Turno {
   estado: string
   asistio: boolean | null
   observaciones: string | null
+  declaracion_jurada_plantilla_id?: string | null
+  declaracion_jurada_respuesta_id?: string | null
   confirmacion_estado?: string | null
   confirmacion_enviada_at?: string | null
   clientes: { nombre: string; apellido: string; telefono: string }
@@ -166,6 +178,8 @@ export interface Turno {
   }
   empleadas?: { id: string; nombre: string; apellido?: string | null }
   empleada_final?: { id: string; nombre: string; apellido?: string | null }
+  declaracion_jurada_plantilla?: { id: string; nombre: string; activa?: boolean | null } | null
+  declaracion_jurada_respuesta?: { id: string; estado?: string | null; submitted_at?: string | null } | null
   minutos_tarde?: number | null
   penalidad_monto?: number | null
   penalidad_motivo?: string | null
@@ -192,6 +206,14 @@ export interface Turno {
 }
 
 type Columna = { id: string; nombre: string; activa: boolean; horario?: HorarioLaboral | null; ausenciasParciales?: EmpleadaAusencia[] }
+type DeclaracionInicioPayload = {
+  id?: string
+  link?: string
+  whatsapp_url?: string | null
+  mensaje?: string | null
+  plantilla_nombre?: string | null
+  cliente_telefono?: string | null
+}
 
 export function TurnosGrid() {
   const { data: turnos = [], mutate } = useSWR<Turno[]>("/api/turnos", fetcher)
@@ -218,6 +240,7 @@ export function TurnosGrid() {
   const [selectedSlot, setSelectedSlot] = useState<{ columnaId: string; top: number } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [iniciandoId, setIniciandoId] = useState<string | null>(null)
+  const [declaracionInicio, setDeclaracionInicio] = useState<DeclaracionInicioPayload | null>(null)
   const formRef = useRef<HTMLDivElement | null>(null)
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(currentWeekStart, index)), [currentWeekStart])
@@ -480,12 +503,15 @@ const slots = useMemo(() => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado: "en_curso" }),
       })
+      const payload = await res.json().catch(() => null)
       if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        alert(data?.error || "No se pudo iniciar el turno")
+        alert(payload?.error || "No se pudo iniciar el turno")
         return
       }
       mutate()
+      if (payload?.declaracion_jurada?.link) {
+        setDeclaracionInicio(payload.declaracion_jurada as DeclaracionInicioPayload)
+      }
     } finally {
       setIniciandoId((current) => (current === id ? null : current))
     }
@@ -506,6 +532,15 @@ const slots = useMemo(() => {
   const totalTurnosDiaSeleccionado = turnosTotalesPorDia[selectedKey] || 0
   const previewFecha = createPreview.fecha || createData.fecha
   const previewEmpleadaId = createPreview.empleada_id ?? createData.empleada_id
+  const handleCopyDeclaracionLink = async () => {
+    if (!declaracionInicio?.link) return
+    try {
+      await navigator.clipboard.writeText(declaracionInicio.link)
+      alert("Link copiado.")
+    } catch {
+      alert("No se pudo copiar el link.")
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -951,6 +986,50 @@ const slots = useMemo(() => {
                 setSelectedSlot(null)
               }}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(declaracionInicio)} onOpenChange={(open) => !open && setDeclaracionInicio(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Declaración jurada generada</DialogTitle>
+            <DialogDescription>
+              {declaracionInicio?.plantilla_nombre
+                ? `Se generó el link para "${declaracionInicio.plantilla_nombre}".`
+                : "Se generó el link de declaración jurada para este turno."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/30 p-3 text-sm break-all">{declaracionInicio?.link || "-"}</div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={handleCopyDeclaracionLink} disabled={!declaracionInicio?.link}>
+                <CopyIcon className="h-4 w-4 mr-1.5" />
+                Copiar link
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => declaracionInicio?.link && window.open(declaracionInicio.link, "_blank", "noopener,noreferrer")}
+                disabled={!declaracionInicio?.link}
+              >
+                <ExternalLinkIcon className="h-4 w-4 mr-1.5" />
+                Abrir
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!declaracionInicio?.whatsapp_url) {
+                    alert("La clienta no tiene teléfono válido para WhatsApp.")
+                    return
+                  }
+                  window.open(declaracionInicio.whatsapp_url, "_blank", "noopener,noreferrer")
+                }}
+              >
+                <MessageCircleIcon className="h-4 w-4 mr-1.5" />
+                Enviar por WhatsApp
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

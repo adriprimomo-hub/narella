@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
+import { resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_THRESHOLD_DAYS = 35
@@ -53,8 +55,11 @@ const resolvePageSize = (rawValue: string | null) => {
   return Math.min(Math.max(parsed, 1), 100)
 }
 
-const buildReminderMessage = (params: { clienta: string; cantidadDias: number; servicioVencido: string }) => {
-  const template = normalizeTemplate(process.env.WA_ME_SERVICIO_VENCIDO_TEMPLATE)
+const buildReminderMessage = (
+  params: { clienta: string; cantidadDias: number; servicioVencido: string },
+  templateOverride?: string | null,
+) => {
+  const template = normalizeTemplate(templateOverride || process.env.WA_ME_SERVICIO_VENCIDO_TEMPLATE)
   const values: Record<string, string> = {
     clienta: params.clienta,
     cliente: params.clienta,
@@ -116,6 +121,7 @@ export async function GET(request: Request) {
 
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user) || user.id
 
   const url = new URL(request.url)
   const thresholdDays = resolveThresholdDays(url.searchParams.get("dias"))
@@ -137,7 +143,7 @@ export async function GET(request: Request) {
       servicio_final:servicio_final_id(id, nombre)
     `,
     )
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .eq("estado", "completado")
     .order("fecha_inicio", { ascending: false })
 
@@ -146,7 +152,7 @@ export async function GET(request: Request) {
   const { data: recordatoriosData, error: recordatoriosError } = await db
     .from("servicio_vencido_recordatorios")
     .select("cliente_id, servicio_id, enviado_at")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   if (recordatoriosError) return NextResponse.json({ error: recordatoriosError.message }, { status: 500 })
 
@@ -194,6 +200,7 @@ export async function GET(request: Request) {
   })
 
   const now = new Date()
+  const templates = await resolveTenantMensajeriaTemplates(db, tenantId)
   const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
 
   const allItems = Array.from(latestByClientService.values())
@@ -212,7 +219,7 @@ export async function GET(request: Request) {
         clienta: item.clienta,
         cantidadDias: diasDesdeUltimoServicio,
         servicioVencido: item.servicio,
-      })
+      }, templates.servicios_vencidos)
       const telefonoSanitizado = sanitizePhoneNumber(item.telefono || "")
       const telefonoValido = telefonoSanitizado.length >= 8 ? telefonoSanitizado : null
       const whatsappUrl = telefonoValido

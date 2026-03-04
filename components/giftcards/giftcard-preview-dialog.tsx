@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
+import useSWR from "swr"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Share2Icon } from "lucide-react"
@@ -21,6 +22,15 @@ type GiftcardPreviewDialogProps = {
   giftcardId?: string | null
 }
 
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
+
+const renderTemplate = (template: string, vars: Record<string, string>) =>
+  template.replace(/\{([^}]+)\}/g, (match, rawKey) => {
+    const key = String(rawKey || "").trim()
+    if (!key || !(key in vars)) return match
+    return vars[key]
+  })
+
 export function GiftcardPreviewDialog({
   open,
   onOpenChange,
@@ -31,6 +41,7 @@ export function GiftcardPreviewDialog({
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { data: config } = useSWR<{ wa_template_facturas_giftcards?: string | null }>("/api/config", fetcher)
   const previewSrc = imageDataUrl || shareUrl
   const isInlineImage = Boolean(previewSrc && previewSrc.startsWith("data:image/"))
   const isInlinePdf = Boolean(previewSrc && previewSrc.startsWith("data:application/pdf"))
@@ -72,12 +83,21 @@ export function GiftcardPreviewDialog({
       alert(error || "No se pudo generar el link.")
       return
     }
+    const clienteNombre = info?.cliente?.trim() || "Clienta"
+    const template =
+      config?.wa_template_facturas_giftcards?.trim() || "Hola {cliente}! Te compartimos tu comprobante: {link}"
+    const message = renderTemplate(template, {
+      cliente: clienteNombre,
+      clienta: clienteNombre,
+      numero: info?.numero?.trim() || "",
+      link: shareUrl,
+    })
     if (navigator.share) {
       try {
         await navigator.share({
           url: shareUrl,
           title: "Giftcard",
-          text: "Giftcard generada",
+          text: message,
         })
         return
       } catch (err: any) {
@@ -85,10 +105,10 @@ export function GiftcardPreviewDialog({
       }
     }
     try {
-      await navigator.clipboard.writeText(shareUrl)
-      alert("Link copiado.")
+      await navigator.clipboard.writeText(message)
+      alert("Mensaje copiado.")
     } catch {
-      alert("No se pudo copiar el link.")
+      alert("No se pudo copiar el mensaje.")
     }
   }
 

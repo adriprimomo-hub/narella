@@ -52,7 +52,7 @@ export interface TwilioResponse {
   error?: string
 }
 
-const DEFAULT_CONFIRMATION_TEMPLATE = `Hola {cliente}!
+export const DEFAULT_CONFIRMATION_TEMPLATE = `Hola {cliente}!
 
 Te recordamos tu turno:
 
@@ -66,7 +66,7 @@ Por favor, confirmá tu asistencia en el siguiente enlace:
 
 ¡Te esperamos!`
 
-const DEFAULT_REMINDER_TEMPLATE = `Hola {cliente}!
+export const DEFAULT_REMINDER_TEMPLATE = `Hola {cliente}!
 
 Te recordamos que mañana tenés turno:
 
@@ -85,7 +85,10 @@ const normalizeTemplate = (raw: string | undefined, fallback: string) => {
   return raw.replace(/\\n/g, "\n")
 }
 
-const getTemplate = (type: "confirmation" | "reminder") => {
+const getTemplate = (type: "confirmation" | "reminder", override?: string | null) => {
+  if (override && String(override).trim().length > 0) {
+    return normalizeTemplate(override, type === "confirmation" ? DEFAULT_CONFIRMATION_TEMPLATE : DEFAULT_REMINDER_TEMPLATE)
+  }
   const envKey =
     type === "confirmation"
       ? "TWILIO_WHATSAPP_TEMPLATE_CONFIRMATION"
@@ -178,16 +181,16 @@ export function formatWhatsAppNumber(phone: string): string {
 /**
  * Construye el mensaje de confirmación de turno
  */
-export function buildConfirmationMessage(data: TurnoWhatsAppData): string {
-  const template = getTemplate("confirmation")
+export function buildConfirmationMessage(data: TurnoWhatsAppData, templateOverride?: string | null): string {
+  const template = getTemplate("confirmation", templateOverride)
   return renderTemplate(template, buildTemplateVars(data))
 }
 
 /**
  * Construye el mensaje de recordatorio (24hs antes)
  */
-export function buildReminderMessage(data: TurnoWhatsAppData): string {
-  const template = getTemplate("reminder")
+export function buildReminderMessage(data: TurnoWhatsAppData, templateOverride?: string | null): string {
+  const template = getTemplate("reminder", templateOverride)
   return renderTemplate(template, buildTemplateVars(data))
 }
 
@@ -234,8 +237,11 @@ export async function sendWhatsAppMessage(message: WhatsAppMessage): Promise<Twi
 /**
  * Envía un mensaje de confirmación de turno por WhatsApp
  */
-export async function sendTurnoConfirmation(data: TurnoWhatsAppData): Promise<TwilioResponse> {
-  const message = buildConfirmationMessage(data)
+export async function sendTurnoConfirmation(
+  data: TurnoWhatsAppData,
+  options?: { templateOverride?: string | null },
+): Promise<TwilioResponse> {
+  const message = buildConfirmationMessage(data, options?.templateOverride)
   return sendWhatsAppMessage({
     to: data.clienteTelefono,
     body: message,
@@ -245,8 +251,11 @@ export async function sendTurnoConfirmation(data: TurnoWhatsAppData): Promise<Tw
 /**
  * Envía un recordatorio de turno por WhatsApp (24hs antes)
  */
-export async function sendTurnoReminder(data: TurnoWhatsAppData): Promise<TwilioResponse> {
-  const message = buildReminderMessage(data)
+export async function sendTurnoReminder(
+  data: TurnoWhatsAppData,
+  options?: { templateOverride?: string | null },
+): Promise<TwilioResponse> {
+  const message = buildReminderMessage(data, options?.templateOverride)
   return sendWhatsAppMessage({
     to: data.clienteTelefono,
     body: message,

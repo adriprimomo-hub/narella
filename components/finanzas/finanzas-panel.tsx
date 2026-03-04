@@ -25,6 +25,13 @@ const DEFAULT_LIST_LIMIT = 60
 const PAGE_LIMIT = 60
 const PAGE_QUERY_LIMIT = PAGE_LIMIT
 
+const renderTemplate = (template: string, vars: Record<string, string>) =>
+  template.replace(/\{([^}]+)\}/g, (match, rawKey) => {
+    const key = String(rawKey || "").trim()
+    if (!key || !(key in vars)) return match
+    return vars[key]
+  })
+
 const useDebouncedValue = <T,>(value: T, delay = 250) => {
   const [debounced, setDebounced] = useState(value)
 
@@ -94,7 +101,11 @@ type LiquidacionHistorial = {
   total_neto: number
 }
 
-type Config = { metodos_pago_config?: { nombre: string }[]; rol?: string }
+type Config = {
+  metodos_pago_config?: { nombre: string }[]
+  rol?: string
+  wa_template_liquidaciones?: string | null
+}
 
 export function FinanzasPanel() {
   const { data: config } = useSWR<Config>("/api/config", fetcher)
@@ -331,12 +342,21 @@ export function FinanzasPanel() {
       alert(liquidacionShareError || "No se pudo generar el link de la liquidación.")
       return
     }
+    const empleadaNombre = liquidacionToShare
+      ? [liquidacionToShare.empleada?.nombre, liquidacionToShare.empleada?.apellido].filter(Boolean).join(" ").trim() || "Staff"
+      : "Staff"
+    const template = config?.wa_template_liquidaciones?.trim() || "Hola {empleada}! Te compartimos tu liquidacion: {link}"
+    const message = renderTemplate(template, {
+      empleada: empleadaNombre,
+      staff: empleadaNombre,
+      link: liquidacionShareUrl,
+    })
     if (navigator.share) {
       try {
         await navigator.share({
           url: liquidacionShareUrl,
           title: "Liquidación",
-          text: liquidacionToShare ? `Liquidación ${liquidacionToShare.empleada.nombre}` : "Liquidación",
+          text: message,
         })
         return
       } catch (err: any) {
@@ -344,10 +364,10 @@ export function FinanzasPanel() {
       }
     }
     try {
-      await navigator.clipboard.writeText(liquidacionShareUrl)
-      alert("Link copiado.")
+      await navigator.clipboard.writeText(message)
+      alert("Mensaje copiado.")
     } catch {
-      alert("No se pudo copiar el link.")
+      alert("No se pudo copiar el mensaje.")
     }
   }
 

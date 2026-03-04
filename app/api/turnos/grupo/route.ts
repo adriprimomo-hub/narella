@@ -37,6 +37,7 @@ type GrupoItem = {
 const grupoSchema = z.object({
   cliente_id: z.string().min(1),
   fecha_inicio: z.string().min(1),
+  declaracion_jurada_plantilla_id: z.string().optional().nullable(),
   turnos: z
     .array(
       z.object({
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
   if (validationResponse) return validationResponse
   const cliente_id: string = payload.cliente_id
   const fecha_inicio: string = payload.fecha_inicio
+  const declaracion_jurada_plantilla_id: string | null = payload.declaracion_jurada_plantilla_id || null
   const items: GrupoItem[] = payload.turnos
 
   const fechaInicioDate = new Date(fecha_inicio)
@@ -94,11 +96,30 @@ export async function POST(request: Request) {
     }
   }
 
+  let declaracionPlantillaId: string | null = null
+  if (declaracion_jurada_plantilla_id) {
+    const { data: plantilla, error: plantillaError } = await db
+      .from("declaraciones_juradas_plantillas")
+      .select("id, activa")
+      .eq("id", declaracion_jurada_plantilla_id)
+      .eq("usuario_id", tenantId)
+      .maybeSingle()
+
+    if (plantillaError) return NextResponse.json({ error: plantillaError.message }, { status: 500 })
+    if (!plantilla) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada no existe." }, { status: 404 })
+    }
+    if (plantilla.activa === false) {
+      return NextResponse.json({ error: "La declaración jurada seleccionada está inactiva." }, { status: 409 })
+    }
+    declaracionPlantillaId = plantilla.id
+  }
+
   const servicioIds = Array.from(new Set(items.map((item) => item.servicio_id).filter(Boolean)))
   const { data: servicios, error: serviciosError } = await db
     .from("servicios")
     .select("id, nombre, empleadas_habilitadas")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .in("id", servicioIds)
 
   if (serviciosError) {
@@ -128,7 +149,7 @@ export async function POST(request: Request) {
       .from("empleadas")
       .select("id, horarios, activo")
       .eq("id", item.empleada_id)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
 
     if (staffError || !staff) {
@@ -150,7 +171,7 @@ export async function POST(request: Request) {
     const { data: overlapping, error: overlapError } = await db
       .from("turnos")
       .select("id, fecha_inicio, fecha_fin, estado, confirmacion_estado")
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .eq("empleada_id", item.empleada_id)
       .lt("fecha_inicio", fecha_fin)
       .gt("fecha_fin", fechaInicioDate.toISOString())
@@ -174,7 +195,7 @@ export async function POST(request: Request) {
     .from("turno_grupos")
     .insert([
       {
-        usuario_id: user.id,
+        usuario_id: tenantId,
         cliente_id,
         fecha_inicio,
       },
@@ -190,7 +211,7 @@ export async function POST(request: Request) {
     const duracion = Number.parseInt(String(item.duracion_minutos))
     const fecha_fin = new Date(fechaInicioDate.getTime() + duracion * 60000).toISOString()
     return {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       creado_por_username: username,
       cliente_id,
       grupo_id: grupo.id,
@@ -203,6 +224,7 @@ export async function POST(request: Request) {
       duracion_minutos: duracion,
       estado: "pendiente",
       observaciones: item.observaciones ?? null,
+      declaracion_jurada_plantilla_id: declaracionPlantillaId,
       creado_por: user.id,
     }
   })

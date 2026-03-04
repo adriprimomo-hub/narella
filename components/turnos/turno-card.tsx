@@ -13,7 +13,16 @@ import { CerrarGrupoModal } from "../pagos/cerrar-grupo-modal"
 import { TurnoForm } from "./turno-form"
 import { UserBadge } from "../ui/user-badge"
 import { useState } from "react"
-import { BanIcon, Loader2Icon, MessageCircleIcon, PencilIcon, PlayIcon, PlusIcon } from "lucide-react"
+import {
+  BanIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  MessageCircleIcon,
+  PencilIcon,
+  PlayIcon,
+  PlusIcon,
+} from "lucide-react"
 import { formatDate } from "@/lib/date-format"
 
 interface TurnoCardProps {
@@ -26,6 +35,15 @@ interface TurnoCardProps {
   servicios: Servicio[]
   empleadas: Empleada[]
   canDelete?: boolean
+}
+
+type DeclaracionInicioPayload = {
+  id?: string
+  link?: string
+  whatsapp_url?: string | null
+  mensaje?: string | null
+  plantilla_nombre?: string | null
+  cliente_telefono?: string | null
 }
 
 export function TurnoCard({
@@ -42,6 +60,7 @@ export function TurnoCard({
   const [loading, setLoading] = useState(false)
   const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [declaracionInicio, setDeclaracionInicio] = useState<DeclaracionInicioPayload | null>(null)
 
   const fecha = new Date(turno.fecha_inicio)
   const hora = fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -66,12 +85,20 @@ export function TurnoCard({
   const handleStatusChange = async (newStatus: string) => {
     setLoading(true)
     try {
-      await fetch(`/api/turnos/${turno.id}`, {
+      const res = await fetch(`/api/turnos/${turno.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado: newStatus }),
       })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        alert(payload?.error || "No se pudo actualizar el turno")
+        return
+      }
       onRefresh()
+      if (newStatus === "en_curso" && payload?.declaracion_jurada?.link) {
+        setDeclaracionInicio(payload.declaracion_jurada as DeclaracionInicioPayload)
+      }
     } finally {
       setLoading(false)
     }
@@ -327,6 +354,63 @@ export function TurnoCard({
               onRefresh()
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(declaracionInicio)} onOpenChange={(open) => !open && setDeclaracionInicio(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Declaración jurada generada</DialogTitle>
+            <DialogDescription>
+              {declaracionInicio?.plantilla_nombre
+                ? `Se generó el link para "${declaracionInicio.plantilla_nombre}".`
+                : "Se generó el link de declaración jurada para este turno."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/30 p-3 text-sm break-all">{declaracionInicio?.link || "-"}</div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  if (!declaracionInicio?.link) return
+                  try {
+                    await navigator.clipboard.writeText(declaracionInicio.link)
+                    alert("Link copiado.")
+                  } catch {
+                    alert("No se pudo copiar el link.")
+                  }
+                }}
+                disabled={!declaracionInicio?.link}
+              >
+                <CopyIcon className="h-4 w-4 mr-1.5" />
+                Copiar link
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => declaracionInicio?.link && window.open(declaracionInicio.link, "_blank", "noopener,noreferrer")}
+                disabled={!declaracionInicio?.link}
+              >
+                <ExternalLinkIcon className="h-4 w-4 mr-1.5" />
+                Abrir
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!declaracionInicio?.whatsapp_url) {
+                    alert("La clienta no tiene teléfono válido para WhatsApp.")
+                    return
+                  }
+                  window.open(declaracionInicio.whatsapp_url, "_blank", "noopener,noreferrer")
+                }}
+              >
+                <MessageCircleIcon className="h-4 w-4 mr-1.5" />
+                Enviar por WhatsApp
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

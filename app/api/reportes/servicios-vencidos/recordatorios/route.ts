@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
 
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user) || user.id
 
   const { data: payload, response: validationResponse } = await validateBody(request, recordatorioSchema)
   if (validationResponse) return validationResponse
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
 
   const { error } = await db.from("servicio_vencido_recordatorios").upsert(
     {
-      usuario_id: user.id,
+      usuario_id: tenantId,
       cliente_id: payload.cliente_id,
       servicio_id: payload.servicio_id,
       enviado_at: nowIso,

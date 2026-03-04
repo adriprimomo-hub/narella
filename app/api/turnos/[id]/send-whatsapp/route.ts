@@ -1,6 +1,7 @@
 import { resolveAppUrl } from "@/lib/url"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { buildConfirmationTokenInsertPayload, isConfirmationTokenExpired } from "@/lib/confirmacion"
 import {
   isTwilioConfigured,
@@ -8,6 +9,7 @@ import {
   buildConfirmationMessage,
   type TurnoWhatsAppData,
 } from "@/lib/twilio"
+import { resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
 import { type NextRequest, NextResponse } from "next/server"
 import { formatDate } from "@/lib/date-format"
 
@@ -35,6 +37,7 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
     if (!user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
+    const tenantId = getTenantId(user) || user.id
     // Obtener turno con datos del cliente, servicio y empleada
     const { data: turno, error: turnoError } = await db
       .from("turnos")
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
         empleadas:empleada_final_id (nombre, apellido)
       `)
       .eq("id", turnoId)
-      .eq("usuario_id", user.id)
+      .eq("usuario_id", tenantId)
       .single()
 
     if (turnoError || !turno) {
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
     if (!token) {
       const { data: tokenRow, error: tokenError } = await db
         .from("confirmation_tokens")
-        .insert(buildConfirmationTokenInsertPayload({ turnoId: turno.id, usuarioId: user.id }))
+        .insert(buildConfirmationTokenInsertPayload({ turnoId: turno.id, usuarioId: tenantId }))
         .select("token, expires_at")
         .maybeSingle()
       if (tokenError || !tokenRow?.token) {
@@ -131,6 +134,7 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
         confirmacion_enviada_at: new Date().toISOString(),
       })
       .eq("id", turnoId)
+      .eq("usuario_id", tenantId)
 
     // Si Twilio está configurado, enviar por API directamente
     const turnoData: TurnoWhatsAppData = {
@@ -145,7 +149,8 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
       linkConfirmacion: confirmarUrl,
       duracion: turno.duracion_minutos ? String(turno.duracion_minutos) : "",
     }
-    const mensaje = buildConfirmationMessage(turnoData)
+    const templates = await resolveTenantMensajeriaTemplates(db, tenantId)
+    const mensaje = buildConfirmationMessage(turnoData, templates.confirmaciones)
 
     if (isTwilioConfigured()) {
       const twilioResult = await sendWhatsAppMessage({

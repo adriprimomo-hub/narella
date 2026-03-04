@@ -9,6 +9,7 @@ import {
   sendWhatsAppMessage,
   type TurnoWhatsAppData,
 } from "@/lib/twilio"
+import { resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
 import { NextResponse, type NextRequest } from "next/server"
 
 const DEFAULT_TIMEZONE = process.env.APP_TIMEZONE || "America/Argentina/Buenos_Aires"
@@ -256,6 +257,7 @@ const runDailyConfirmations = async (request: NextRequest) => {
       linkConfirmacion?: string
       whatsappUrl?: string
     }> = []
+    const templateCache = new Map<string, string>()
 
     for (const turno of turnos) {
       const cliente = turno.clientes as any
@@ -350,7 +352,19 @@ const runDailyConfirmations = async (request: NextRequest) => {
         duracion: turno.duracion_minutos ? String(turno.duracion_minutos) : "",
       }
 
-      const result = await sendTurnoConfirmation(turnoData)
+      const tenantId = String(turno.usuario_id || "")
+      let confirmTemplate = templateCache.get(tenantId) || null
+      if (!confirmTemplate && tenantId) {
+        try {
+          const templates = await resolveTenantMensajeriaTemplates(localAdmin, tenantId)
+          confirmTemplate = templates.confirmaciones
+          templateCache.set(tenantId, confirmTemplate)
+        } catch {
+          confirmTemplate = null
+        }
+      }
+
+      const result = await sendTurnoConfirmation(turnoData, { templateOverride: confirmTemplate })
 
       if (result.success) {
         const { error: updateError } = await localAdmin
@@ -381,7 +395,7 @@ const runDailyConfirmations = async (request: NextRequest) => {
           linkConfirmacion,
         })
       } else {
-        const mensaje = buildConfirmationMessage(turnoData)
+        const mensaje = buildConfirmationMessage(turnoData, confirmTemplate)
         const whatsappUrl = `https://wa.me/${clienteTelefono}?text=${encodeURIComponent(mensaje)}`
         resultados.push({
           turnoId: turno.id,

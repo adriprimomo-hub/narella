@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { LOCALDB_SESSION_COOKIE } from "@/lib/localdb/session"
 
-const PUBLIC_PATH_PREFIXES = ["/auth", "/confirmar", "/compartir"]
+const PUBLIC_PATH_PREFIXES = ["/auth", "/confirmar", "/compartir", "/declaracion"]
 
 const isPublicPath = (pathname: string) =>
   PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))

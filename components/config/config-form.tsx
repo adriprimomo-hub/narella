@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Empleada } from "@/components/empleadas/types"
+import { DeclaracionesJuradasManager } from "@/components/config/declaraciones-juradas-manager"
 
 const fetcher = (url: string) => fetch(url, { cache: "no-store" }).then((res) => res.json())
 
@@ -19,6 +21,19 @@ interface Usuario {
   metodos_pago?: string[]
   metodos_pago_config?: MetodoPagoConfig[]
   horario_local?: HorarioLocal[]
+  factura_logo_url?: string | null
+  factura_leyenda?: string | null
+  factura_leyenda_footer?: string | null
+  factura_emisor_nombre?: string | null
+  factura_emisor_domicilio?: string | null
+  factura_emisor_telefono?: string | null
+  factura_emisor_email?: string | null
+  wa_template_confirmaciones?: string | null
+  wa_template_facturas_giftcards?: string | null
+  wa_template_liquidaciones?: string | null
+  wa_template_servicios_vencidos?: string | null
+  wa_template_declaraciones_juradas?: string | null
+  giftcard_template_data_url?: string | null
 }
 
 type AdminUser = {
@@ -94,6 +109,22 @@ export function ConfigForm() {
   const [showHorarioDialog, setShowHorarioDialog] = useState(false)
   const [showMetodosDialog, setShowMetodosDialog] = useState(false)
   const [showUsuariosDialog, setShowUsuariosDialog] = useState(false)
+  const [showComunicacionDialog, setShowComunicacionDialog] = useState(false)
+  const [comunicacionDraft, setComunicacionDraft] = useState({
+    factura_logo_url: "",
+    factura_leyenda: "",
+    factura_leyenda_footer: "",
+    factura_emisor_nombre: "",
+    factura_emisor_domicilio: "",
+    factura_emisor_telefono: "",
+    factura_emisor_email: "",
+    wa_template_confirmaciones: "",
+    wa_template_facturas_giftcards: "",
+    wa_template_liquidaciones: "",
+    wa_template_servicios_vencidos: "",
+    wa_template_declaraciones_juradas: "",
+    giftcard_template_data_url: "",
+  })
   const { data: adminUsers, mutate: mutateUsers } = useSWR<{ users: AdminUser[] }>(
     config?.rol === "admin" ? "/api/admin/users" : null,
     fetcher,
@@ -116,6 +147,21 @@ export function ConfigForm() {
         return { ...base, ...match, activo }
       })
       setHorarioLocal(normalizado)
+      setComunicacionDraft({
+        factura_logo_url: config.factura_logo_url || "",
+        factura_leyenda: config.factura_leyenda || "",
+        factura_leyenda_footer: config.factura_leyenda_footer || "",
+        factura_emisor_nombre: config.factura_emisor_nombre || "",
+        factura_emisor_domicilio: config.factura_emisor_domicilio || "",
+        factura_emisor_telefono: config.factura_emisor_telefono || "",
+        factura_emisor_email: config.factura_emisor_email || "",
+        wa_template_confirmaciones: config.wa_template_confirmaciones || "",
+        wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
+        wa_template_liquidaciones: config.wa_template_liquidaciones || "",
+        wa_template_servicios_vencidos: config.wa_template_servicios_vencidos || "",
+        wa_template_declaraciones_juradas: config.wa_template_declaraciones_juradas || "",
+        giftcard_template_data_url: config.giftcard_template_data_url || "",
+      })
     }
   }, [config])
 
@@ -170,6 +216,77 @@ export function ConfigForm() {
       setUserFieldErrors({})
       setUserEditErrors({})
     }
+  }
+
+  const handleComunicacionDialogChange = (open: boolean) => {
+    setShowComunicacionDialog(open)
+    if (open && config) {
+      setConfigMessage("")
+      setComunicacionDraft({
+        factura_logo_url: config.factura_logo_url || "",
+        factura_leyenda: config.factura_leyenda || "",
+        factura_leyenda_footer: config.factura_leyenda_footer || "",
+        factura_emisor_nombre: config.factura_emisor_nombre || "",
+        factura_emisor_domicilio: config.factura_emisor_domicilio || "",
+        factura_emisor_telefono: config.factura_emisor_telefono || "",
+        factura_emisor_email: config.factura_emisor_email || "",
+        wa_template_confirmaciones: config.wa_template_confirmaciones || "",
+        wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
+        wa_template_liquidaciones: config.wa_template_liquidaciones || "",
+        wa_template_servicios_vencidos: config.wa_template_servicios_vencidos || "",
+        wa_template_declaraciones_juradas: config.wa_template_declaraciones_juradas || "",
+        giftcard_template_data_url: config.giftcard_template_data_url || "",
+      })
+    }
+  }
+
+  const fileToDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ""))
+      reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
+      reader.readAsDataURL(file)
+    })
+
+  const saveComunicacionConfig = async () => {
+    setConfigLoading(true)
+    setConfigMessage("")
+    try {
+      const res = await fetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          factura_logo_url: comunicacionDraft.factura_logo_url || null,
+          factura_leyenda: comunicacionDraft.factura_leyenda || null,
+          factura_leyenda_footer: comunicacionDraft.factura_leyenda_footer || null,
+          factura_emisor_nombre: comunicacionDraft.factura_emisor_nombre || null,
+          factura_emisor_domicilio: comunicacionDraft.factura_emisor_domicilio || null,
+          factura_emisor_telefono: comunicacionDraft.factura_emisor_telefono || null,
+          factura_emisor_email: comunicacionDraft.factura_emisor_email || null,
+          wa_template_confirmaciones: comunicacionDraft.wa_template_confirmaciones || null,
+          wa_template_facturas_giftcards: comunicacionDraft.wa_template_facturas_giftcards || null,
+          wa_template_liquidaciones: comunicacionDraft.wa_template_liquidaciones || null,
+          wa_template_servicios_vencidos: comunicacionDraft.wa_template_servicios_vencidos || null,
+          wa_template_declaraciones_juradas: comunicacionDraft.wa_template_declaraciones_juradas || null,
+          giftcard_template_data_url: comunicacionDraft.giftcard_template_data_url || null,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        mutate(data, false)
+        setConfigMessage("Configuración guardada.")
+        setTimeout(() => setConfigMessage(""), 3000)
+        return true
+      }
+    } catch (error) {
+      console.error("Error:", error)
+    } finally {
+      setConfigLoading(false)
+    }
+    setConfigMessage("Error al guardar.")
+    return false
   }
 
   const saveConfig = async (nextMetodos: MetodoPagoDraft[], nextHorario: HorarioLocal[]) => {
@@ -370,6 +487,31 @@ export function ConfigForm() {
             {metodosPago.length === 0 && (
               <p className="text-sm text-muted-foreground py-4 text-center">Aún no hay métodos configurados</p>
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {config?.rol === "admin" && <DeclaracionesJuradasManager />}
+
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold">Mensajes y documentos</h3>
+            <p className="text-xs text-muted-foreground">
+              Personaliza textos de envío y branding de facturas/giftcards.
+            </p>
+          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={() => handleComunicacionDialogChange(true)}>
+            Editar
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-2 text-sm text-muted-foreground">
+            <p>Confirmaciones: {comunicacionDraft.wa_template_confirmaciones ? "Personalizado" : "Por defecto"}</p>
+            <p>Facturas/Giftcards: {comunicacionDraft.wa_template_facturas_giftcards ? "Personalizado" : "Por defecto"}</p>
+            <p>Liquidaciones: {comunicacionDraft.wa_template_liquidaciones ? "Personalizado" : "Por defecto"}</p>
+            <p>Servicios vencidos: {comunicacionDraft.wa_template_servicios_vencidos ? "Personalizado" : "Por defecto"}</p>
+            <p>Declaraciones juradas: {comunicacionDraft.wa_template_declaraciones_juradas ? "Personalizado" : "Por defecto"}</p>
           </CardContent>
         </Card>
       </div>
@@ -605,6 +747,222 @@ export function ConfigForm() {
               onClick={async () => {
                 const ok = await saveConfig(metodosDraft, horarioLocal)
                 if (ok) handleMetodosDialogChange(false)
+              }}
+              disabled={configLoading}
+              className="gap-2"
+            >
+              {configLoading ? (
+                <>
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <SaveIcon className="h-4 w-4" />
+                  Guardar cambios
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showComunicacionDialog} onOpenChange={handleComunicacionDialogChange}>
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Mensajes y documentos</DialogTitle>
+            <DialogDescription>
+              Gestiona los textos de envío y la personalización visual de factura/giftcard.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="text-sm font-semibold">Factura (branding y emisor)</h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Nombre emisor</label>
+                  <Input
+                    value={comunicacionDraft.factura_emisor_nombre}
+                    onChange={(e) =>
+                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_nombre: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Domicilio emisor</label>
+                  <Input
+                    value={comunicacionDraft.factura_emisor_domicilio}
+                    onChange={(e) =>
+                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_domicilio: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Teléfono emisor</label>
+                  <Input
+                    value={comunicacionDraft.factura_emisor_telefono}
+                    onChange={(e) =>
+                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_telefono: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Email emisor</label>
+                  <Input
+                    value={comunicacionDraft.factura_emisor_email}
+                    onChange={(e) =>
+                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_email: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Leyenda</label>
+                <Textarea
+                  rows={2}
+                  value={comunicacionDraft.factura_leyenda}
+                  onChange={(e) => setComunicacionDraft((prev) => ({ ...prev, factura_leyenda: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Leyenda footer</label>
+                <Textarea
+                  rows={2}
+                  value={comunicacionDraft.factura_leyenda_footer}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, factura_leyenda_footer: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Logo de factura</label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0]
+                    if (!file) return
+                    try {
+                      const dataUrl = await fileToDataUrl(file)
+                      setComunicacionDraft((prev) => ({ ...prev, factura_logo_url: dataUrl }))
+                    } catch {
+                      alert("No se pudo procesar el logo seleccionado.")
+                    } finally {
+                      event.currentTarget.value = ""
+                    }
+                  }}
+                />
+                {comunicacionDraft.factura_logo_url && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setComunicacionDraft((prev) => ({ ...prev, factura_logo_url: "" }))}
+                  >
+                    Quitar logo personalizado
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="text-sm font-semibold">Giftcard (plantilla)</h4>
+              <Input
+                type="file"
+                accept=".pdf,image/*"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0]
+                  if (!file) return
+                  try {
+                    const dataUrl = await fileToDataUrl(file)
+                    setComunicacionDraft((prev) => ({ ...prev, giftcard_template_data_url: dataUrl }))
+                  } catch {
+                    alert("No se pudo procesar la plantilla seleccionada.")
+                  } finally {
+                    event.currentTarget.value = ""
+                  }
+                }}
+              />
+              {comunicacionDraft.giftcard_template_data_url && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setComunicacionDraft((prev) => ({ ...prev, giftcard_template_data_url: "" }))}
+                >
+                  Quitar plantilla personalizada
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-lg border p-4">
+              <h4 className="text-sm font-semibold">Textos de envío</h4>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Confirmaciones</label>
+                <Textarea
+                  rows={4}
+                  value={comunicacionDraft.wa_template_confirmaciones}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, wa_template_confirmaciones: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Facturas / Giftcards</label>
+                <Textarea
+                  rows={3}
+                  value={comunicacionDraft.wa_template_facturas_giftcards}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, wa_template_facturas_giftcards: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Liquidaciones</label>
+                <Textarea
+                  rows={3}
+                  value={comunicacionDraft.wa_template_liquidaciones}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, wa_template_liquidaciones: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Servicios vencidos</label>
+                <Textarea
+                  rows={3}
+                  value={comunicacionDraft.wa_template_servicios_vencidos}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, wa_template_servicios_vencidos: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Declaraciones juradas</label>
+                <Textarea
+                  rows={3}
+                  value={comunicacionDraft.wa_template_declaraciones_juradas}
+                  onChange={(e) =>
+                    setComunicacionDraft((prev) => ({ ...prev, wa_template_declaraciones_juradas: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          {configMessage && <p className="text-sm text-muted-foreground">{configMessage}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => handleComunicacionDialogChange(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={async () => {
+                const ok = await saveComunicacionConfig()
+                if (ok) handleComunicacionDialogChange(false)
               }}
               disabled={configLoading}
               className="gap-2"
