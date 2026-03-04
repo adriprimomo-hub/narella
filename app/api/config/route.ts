@@ -147,7 +147,12 @@ const getUsuarioConfigRow = async (db: any, userId: string) => {
   const full = await db.from("usuarios").select(USER_CONFIG_SELECT_FULL).eq("id", userId).maybeSingle()
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
-  return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
+
+  const fallback = await db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
+  if (!fallback.error) return fallback
+  if (!isMissingColumnError(fallback.error)) return fallback
+
+  return db.from("usuarios").select("*").eq("id", userId).maybeSingle()
 }
 
 const getConfiguracionRow = async (db: any, tenantId: string) => {
@@ -159,9 +164,17 @@ const getConfiguracionRow = async (db: any, tenantId: string) => {
     return { data: full.data, error: full.error, supportsExtendedColumns: true }
   }
   const fallback = await db.from("configuracion").select(CONFIG_SELECT_FALLBACK).eq("usuario_id", tenantId).maybeSingle()
+  if (!fallback.error || !isMissingColumnError(fallback.error)) {
+    return {
+      data: fallback.data,
+      error: fallback.error,
+      supportsExtendedColumns: false,
+    }
+  }
+  const wildcard = await db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
   return {
-    data: fallback.data,
-    error: fallback.error,
+    data: wildcard.data,
+    error: wildcard.error,
     supportsExtendedColumns: false,
   }
 }

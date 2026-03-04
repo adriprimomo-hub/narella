@@ -48,7 +48,6 @@ const USER_FACTURACION_SELECT_FULL = [
 ].join(", ")
 
 const USER_FACTURACION_SELECT_FALLBACK = [
-  "facturacion_activa",
   "afip_cuit",
   "afip_punto_venta",
   "afip_cbte_tipo",
@@ -98,14 +97,30 @@ const getTenantFacturacionRow = async (db: any, tenantId: string) => {
   const full = await db.from("usuarios").select(USER_FACTURACION_SELECT_FULL).eq("id", tenantId).maybeSingle()
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
-  return db.from("usuarios").select(USER_FACTURACION_SELECT_FALLBACK).eq("id", tenantId).maybeSingle()
+
+  const fallback = await db.from("usuarios").select(USER_FACTURACION_SELECT_FALLBACK).eq("id", tenantId).maybeSingle()
+  if (!fallback.error) return fallback
+  if (!isMissingColumnError(fallback.error)) return fallback
+
+  // Esquemas legacy: pedir todas las columnas evita romper por columnas nuevas faltantes.
+  return db.from("usuarios").select("*").eq("id", tenantId).maybeSingle()
 }
 
 const getTenantConfigRow = async (db: any, tenantId: string) => {
   const full = await db.from("configuracion").select(CONFIG_MENSAJERIA_SELECT).eq("usuario_id", tenantId).maybeSingle()
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
-  return db.from("configuracion").select("giftcard_template_data_url").eq("usuario_id", tenantId).maybeSingle()
+
+  const fallback = await db
+    .from("configuracion")
+    .select("giftcard_template_data_url")
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+  if (!fallback.error) return fallback
+  if (!isMissingColumnError(fallback.error)) return fallback
+
+  // Fallback universal para instalaciones antiguas con columnas personalizadas parciales.
+  return db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
 }
 
 export const resolveTenantMensajeriaTemplates = async (

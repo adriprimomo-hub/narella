@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import type { Turno } from "./turnos-grid"
 import type { Cliente } from "../clientes/clientes-list"
 import type { Servicio } from "../servicios/servicios-list"
@@ -29,6 +30,7 @@ interface TurnoCardProps {
   turno: Turno
   turnosGrupo?: Turno[]
   onDelete: (id: string) => void
+  onDeleteGroup?: (ids: string[]) => void | Promise<void>
   onRefresh: () => void
   onCreateFromCancel?: (turno: Turno) => void
   clientes: Cliente[]
@@ -48,10 +50,18 @@ type DeclaracionInicioPayload = {
   cliente_telefono?: string | null
 }
 
+const formatForInput = (dateString: string) => {
+  const date = new Date(dateString)
+  if (!Number.isFinite(date.getTime())) return ""
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
 export function TurnoCard({
   turno,
   turnosGrupo,
   onDelete,
+  onDeleteGroup,
   onRefresh,
   onCreateFromCancel,
   clientes,
@@ -63,6 +73,9 @@ export function TurnoCard({
   const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [declaracionInicio, setDeclaracionInicio] = useState<DeclaracionInicioPayload | null>(null)
+  const [moveGroupOpen, setMoveGroupOpen] = useState(false)
+  const [movingGroup, setMovingGroup] = useState(false)
+  const [moveGroupFecha, setMoveGroupFecha] = useState(formatForInput(turno.fecha_inicio))
 
   const fecha = new Date(turno.fecha_inicio)
   const hora = fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -186,6 +199,11 @@ export function TurnoCard({
     : []
   const getStaffLabel = (staff?: { nombre?: string | null; apellido?: string | null } | null) =>
     staff ? [staff.nombre, staff.apellido].filter(Boolean).join(" ") : ""
+  const inicioReal = turno.iniciado_en ? new Date(turno.iniciado_en) : null
+  const inicioRealValido = Boolean(inicioReal && Number.isFinite(inicioReal.getTime()))
+  const horaInicioReal = inicioRealValido
+    ? inicioReal!.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : null
   const formatCurrency = (value?: number | null) => {
     const numeric = Number(value)
     if (!Number.isFinite(numeric)) return "N/D"
@@ -203,6 +221,60 @@ export function TurnoCard({
     )
   }
 
+  const handleMoveGroup = async () => {
+    if (!esGrupo) return
+    const baseStart = new Date(turno.fecha_inicio)
+    const nextStart = new Date(moveGroupFecha)
+    if (!Number.isFinite(baseStart.getTime()) || !Number.isFinite(nextStart.getTime())) {
+      alert("Seleccioná una fecha y hora válidas para mover el grupo.")
+      return
+    }
+    const deltaMs = nextStart.getTime() - baseStart.getTime()
+    const turnosMovibles = grupoTurnos.filter(
+      (item) => item.estado !== "completado" && item.estado !== "cancelado" && item.confirmacion_estado !== "cancelado",
+    )
+    if (turnosMovibles.length === 0) {
+      alert("No hay turnos del grupo disponibles para mover.")
+      return
+    }
+
+    setMovingGroup(true)
+    try {
+      for (const item of turnosMovibles) {
+        const itemStart = new Date(item.fecha_inicio)
+        if (!Number.isFinite(itemStart.getTime())) continue
+        const fecha_inicio = new Date(itemStart.getTime() + deltaMs).toISOString()
+        const res = await fetch(`/api/turnos/${item.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fecha_inicio }),
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null)
+          alert(payload?.error || "No se pudo mover uno de los turnos del grupo.")
+          return
+        }
+      }
+      setMoveGroupOpen(false)
+      onRefresh()
+    } finally {
+      setMovingGroup(false)
+    }
+  }
+
+  const handleDeleteAction = async () => {
+    if (esGrupo && onDeleteGroup) {
+      const ids = grupoTurnos
+        .filter((item) => item.estado !== "completado" && item.estado !== "cancelado")
+        .map((item) => item.id)
+      if (ids.length > 0) {
+        await onDeleteGroup(ids)
+      }
+      return
+    }
+    onDelete(turno.id)
+  }
+
   return (
     <Card className="w-full h-full">
       <CardHeader className="pb-3">
@@ -216,6 +288,7 @@ export function TurnoCard({
             </p>
           </div>
         <div className="flex gap-1 flex-wrap">
+            {esGrupo && <Badge variant="info">Simultáneo x{grupoOrdenado.length}</Badge>}
             <Badge variant={confirmacionBadge[confirmState]}>
               {confirmState === "no_enviada" && "Sin enviar"}
               {confirmState === "enviada" && "Enviada"}
@@ -230,6 +303,9 @@ export function TurnoCard({
         <div className="text-sm">
           <p className="font-medium">{hora}</p>
           <p className="text-muted-foreground text-xs sm:text-sm">{fecha_str}</p>
+          {turno.estado === "en_curso" && horaInicioReal && (
+            <p className="text-[color:var(--status-info-fg)] text-xs sm:text-sm">Hora inicio: {horaInicioReal}</p>
+          )}
         </div>
         {(turno.empleadas || turno.empleada_final) && (
           <div className="text-xs sm:text-sm text-muted-foreground">
@@ -333,16 +409,30 @@ export function TurnoCard({
               <CerrarTurnoModal turno={turno} onSuccess={onRefresh} servicios={servicios} empleadas={empleadas} />
             )
           )}
+          {esGrupo && canEdit && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setMoveGroupFecha(formatForInput(turno.fecha_inicio))
+                setMoveGroupOpen(true)
+              }}
+              disabled={loading || movingGroup}
+              className="text-xs gap-1.5"
+            >
+              Mover grupo
+            </Button>
+          )}
           {canDelete && turno.estado !== "completado" && (
             <Button
               size="sm"
               variant="destructive"
-              onClick={() => onDelete(turno.id)}
+              onClick={handleDeleteAction}
               disabled={loading}
               className="text-xs gap-1.5"
             >
               <BanIcon className="h-3.5 w-3.5" />
-              Cancelar
+              {esGrupo ? "Cancelar grupo" : "Cancelar"}
             </Button>
           )}
           <Button
@@ -377,6 +467,44 @@ export function TurnoCard({
               onRefresh()
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moveGroupOpen} onOpenChange={setMoveGroupOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mover turnos simultáneos</DialogTitle>
+            <DialogDescription>
+              Se moverán en bloque todos los turnos activos del grupo, manteniendo la misma diferencia horaria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="text-sm font-medium" htmlFor={`mover-grupo-${turno.id}`}>
+              Nueva fecha y hora base
+            </label>
+            <Input
+              id={`mover-grupo-${turno.id}`}
+              type="datetime-local"
+              value={moveGroupFecha}
+              onChange={(event) => setMoveGroupFecha(event.target.value)}
+              disabled={movingGroup}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setMoveGroupOpen(false)} disabled={movingGroup}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={handleMoveGroup} disabled={movingGroup}>
+                {movingGroup ? (
+                  <>
+                    <Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />
+                    Moviendo...
+                  </>
+                ) : (
+                  "Mover grupo"
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

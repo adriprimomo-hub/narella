@@ -286,6 +286,15 @@ export function TurnosGrid() {
     if (!selectedTurno.grupo_id) return [selectedTurno]
     return turnos.filter((t) => t.grupo_id === selectedTurno.grupo_id)
   }, [selectedTurno, turnos])
+  const gruposCantidad = useMemo(() => {
+    const map: Record<string, number> = {}
+    turnos.forEach((turno) => {
+      const groupId = String(turno.grupo_id || "").trim()
+      if (!groupId) return
+      map[groupId] = (map[groupId] || 0) + 1
+    })
+    return map
+  }, [turnos])
 
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 60_000)
@@ -552,6 +561,26 @@ const slots = useMemo(() => {
     }
   }
 
+  const handleDeleteGroup = async (ids: string[]) => {
+    if (!isAdmin) return
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
+    if (!uniqueIds.length) return
+    if (!confirm(`Cancelar ${uniqueIds.length} turnos del grupo?`)) return
+
+    for (const id of uniqueIds) {
+      const res = await fetch(`/api/turnos/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        alert(payload?.error || "No se pudo cancelar uno de los turnos del grupo.")
+        break
+      }
+    }
+    mutate()
+    if (selectedTurnoId && uniqueIds.includes(selectedTurnoId)) {
+      setSelectedTurnoId(null)
+    }
+  }
+
   const dayLabel = formatDay(selectedDate)
   const weekLabel = `${formatDate(weekDays[0])} - ${formatDate(weekDays[6])}`
   const totalTurnosDiaSeleccionado = turnosTotalesPorDia[selectedKey] || 0
@@ -600,8 +629,13 @@ const slots = useMemo(() => {
                     const staffLabel = staff ? [staff.nombre, staff.apellido].filter(Boolean).join(" ") : ""
                     const timeUntilStartMs = new Date(turno.fecha_inicio).getTime() - ahora.getTime()
                     const startTooEarly = timeUntilStartMs > 60 * 60 * 1000
+                    const simultaneoCount = turno.grupo_id ? gruposCantidad[turno.grupo_id] || 0 : 0
+                    const esSimultaneo = simultaneoCount > 1
                     return (
-                      <TableRow key={`proximo-${turno.id}`}>
+                      <TableRow
+                        key={`proximo-${turno.id}`}
+                        className={cn(esSimultaneo && "bg-[color:var(--status-info-bg)]/35")}
+                      >
                         <TableCell className="font-medium">{`${turno.clientes?.nombre || ""} ${turno.clientes?.apellido || ""}`.trim() || "Cliente"}</TableCell>
                         <TableCell>{staffLabel || "Sin asignar"}</TableCell>
                         <TableCell>{servicio?.nombre || "-"}</TableCell>
@@ -609,7 +643,11 @@ const slots = useMemo(() => {
                           {atraso > 0 ? `${atraso} min` : "0 min"}
                         </TableCell>
                         <TableCell className="text-right">
-                          {turno.grupo_id && <span className="mr-2 text-[11px] text-muted-foreground">Simultáneo</span>}
+                          {esSimultaneo && (
+                            <span className="mr-2 text-[11px] font-medium text-[color:var(--status-info-fg)]">
+                              Simultáneo x{simultaneoCount}
+                            </span>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -875,12 +913,15 @@ const slots = useMemo(() => {
                         const staffLabel = staffData ? [staffData.nombre, staffData.apellido].filter(Boolean).join(" ") : "Sin asignar"
                         const clienteLabel = `${turno.clientes?.nombre || ""} ${turno.clientes?.apellido || ""}`.trim() || "Cliente"
                         const servicioLabel = servicioUsado?.nombre || turno.servicios?.nombre || "Servicio"
-                        const resumen = `${clienteLabel} · ${servicioLabel} · ${staffLabel}${turno.grupo_id ? " · Simultáneo" : ""}`
+                        const simultaneoCount = turno.grupo_id ? gruposCantidad[turno.grupo_id] || 0 : 0
+                        const esSimultaneo = simultaneoCount > 1
+                        const resumen = `${clienteLabel} · ${servicioLabel} · ${staffLabel}${esSimultaneo ? ` · Simultáneo x${simultaneoCount}` : ""}`
                         const title = [
                           `${horaInicio} - ${horaFin}`,
                           `Cliente: ${clienteLabel}`,
                           `Servicio: ${servicioLabel}`,
                           `Staff: ${staffLabel}`,
+                          esSimultaneo ? `Grupo simultáneo (${simultaneoCount})` : null,
                           `Estado: ${confirmacionLabel[confirmState] ?? formatLabel(confirmState)}`,
                           turno.observaciones ? `Obs: ${turno.observaciones}` : null,
                         ]
@@ -895,6 +936,9 @@ const slots = useMemo(() => {
                             title={title}
                             className={cn(
                               "absolute left-1 right-1 overflow-hidden rounded-[var(--radius-md)] border bg-card/95 px-1.5 py-[3px] text-left shadow-[var(--shadow-xs)] transition hover:border-primary/30 hover:bg-accent/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 pointer-events-auto",
+                              esSimultaneo &&
+                                !isCanceled &&
+                                "border-[color:var(--status-info-border)] bg-[color:var(--status-info-bg)]/55 hover:bg-[color:var(--status-info-bg)]/75",
                               isCanceled && "border-destructive/40 bg-destructive/5",
                             )}
                             style={{ top: `${top}px`, height: `${height}px` }}
@@ -903,6 +947,7 @@ const slots = useMemo(() => {
                               className={cn(
                                 "flex items-center justify-between gap-1 text-[10px] font-semibold leading-[1.15]",
                                 isCanceled ? "text-destructive" : "text-primary",
+                                esSimultaneo && !isCanceled && "text-[color:var(--status-info-fg)]",
                               )}
                             >
                               <span className="min-w-0 truncate whitespace-nowrap">
@@ -951,6 +996,7 @@ const slots = useMemo(() => {
                   turno={selectedTurno}
                   turnosGrupo={selectedGrupoTurnos}
                   onDelete={handleDelete}
+                  onDeleteGroup={handleDeleteGroup}
                   onRefresh={mutate}
                   onCreateFromCancel={handleCreateFromCancel}
                   clientes={clientes || []}
