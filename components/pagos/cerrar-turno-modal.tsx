@@ -12,7 +12,18 @@ import type { Servicio } from "../servicios/servicios-list"
 import type { Empleada } from "../empleadas/types"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { CreditCardIcon, Loader2Icon, SearchIcon, Trash2Icon, WalletIcon, XIcon, UserIcon } from "lucide-react"
+import {
+  CopyIcon,
+  CreditCardIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  MessageCircleIcon,
+  SearchIcon,
+  Trash2Icon,
+  WalletIcon,
+  XIcon,
+  UserIcon,
+} from "lucide-react"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { FacturandoDialog } from "@/components/facturacion/facturando-dialog"
 import { VerTurnoFotoButton } from "@/components/turnos/ver-turno-foto-button"
@@ -76,6 +87,23 @@ type Config = {
   rol?: string
 }
 
+type DeclaracionTurnoPayload = {
+  id?: string
+  estado?: string | null
+  link?: string
+  whatsapp_url?: string | null
+  plantilla_nombre?: string | null
+}
+
+const declaracionEstadoLabel = (estado?: string | null) => {
+  if (!estado) return "Pendiente"
+  if (estado === "completada") return "Completada"
+  if (estado === "pendiente") return "Pendiente"
+  if (estado === "expirada") return "Expirada"
+  if (estado === "cancelada") return "Cancelada"
+  return estado
+}
+
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const createLocalId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -90,7 +118,6 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
   )
   const { data: productos = [] } = useSWR<Producto[]>("/api/productos", fetcher)
   const { data: config } = useSWR<Config>("/api/config", fetcher)
-  const isAdmin = config?.rol === "admin"
 
   const inicialServicio = turno.servicio_final_id || turno.servicio_id
   const inicialEmpleada = turno.empleada_final_id || turno.empleada_id || ""
@@ -117,6 +144,23 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
   const [searchServicio, setSearchServicio] = useState("")
   const [searchProducto, setSearchProducto] = useState("")
   const [submitAttempted, setSubmitAttempted] = useState(false)
+  const [declaracionPayload, setDeclaracionPayload] = useState<DeclaracionTurnoPayload | null>(null)
+  const [declaracionRespuestaId, setDeclaracionRespuestaId] = useState<string | null>(
+    turno.declaracion_jurada_respuesta_id || null,
+  )
+  const [declaracionEstado, setDeclaracionEstado] = useState<string | null>(
+    turno.declaracion_jurada_respuesta?.estado || null,
+  )
+  const [declaracionSending, setDeclaracionSending] = useState(false)
+  const [declaracionViewOpen, setDeclaracionViewOpen] = useState(false)
+  const declaracionDetalleKey = declaracionRespuestaId
+    ? `/api/declaraciones-juradas/respuestas/${declaracionRespuestaId}`
+    : null
+  const { data: declaracionDetalle, mutate: mutateDeclaracionDetalle, isLoading: declaracionDetalleLoading } = useSWR<any>(
+    declaracionDetalleKey,
+    fetcher,
+  )
+  const isAdmin = config?.rol === "admin"
   const metodosPago = useMemo(() => {
     if (config?.metodos_pago_config?.length) return config.metodos_pago_config.map((m) => m.nombre).filter(Boolean)
     return ["efectivo", "tarjeta", "transferencia"]
@@ -194,6 +238,10 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
     setPrecioServicio(servicioTurno?.precio_lista == null ? "" : Number(servicioTurno.precio_lista))
     setAplicarGiftcardId("ninguna")
     setSubmitAttempted(false)
+    setDeclaracionPayload(null)
+    setDeclaracionRespuestaId(turno.declaracion_jurada_respuesta_id || null)
+    setDeclaracionEstado(turno.declaracion_jurada_respuesta?.estado || null)
+    setDeclaracionViewOpen(false)
   }, [
     open,
     servicios,
@@ -205,7 +253,14 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
     turno.productos_agregados,
     turno.servicio_final_id,
     turno.servicio_id,
+    turno.declaracion_jurada_respuesta_id,
+    turno.declaracion_jurada_respuesta?.estado,
   ])
+
+  useEffect(() => {
+    if (!declaracionDetalle?.estado) return
+    setDeclaracionEstado(String(declaracionDetalle.estado))
+  }, [declaracionDetalle?.estado])
 
   const senaSeleccionada = useMemo(() => senas?.find((s) => s.id === aplicarSenaId), [senas, aplicarSenaId])
   const giftcardSeleccionada = useMemo(
@@ -257,6 +312,12 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
     (p) => p.cantidad === "" || Number(p.cantidad) <= 0 || p.precio_unitario === "",
   )
   const precioServicioInvalido = precioServicio === ""
+  const declaracionRequerida = Boolean(turno.declaracion_jurada_plantilla_id)
+  const declaracionEnviada = Boolean(declaracionRespuestaId)
+  const declaracionEstadoActual = declaracionEstado || (declaracionEnviada ? "pendiente" : null)
+  const declaracionCompletada = declaracionEstadoActual === "completada"
+  const declaracionPlantillaNombre = turno.declaracion_jurada_plantilla?.nombre || declaracionPayload?.plantilla_nombre || null
+  const declaracionLink = declaracionPayload?.link || null
 
   useEffect(() => {
     if (!puedeFacturar && facturar) {
@@ -326,9 +387,54 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
     return label || null
   }
 
+  const handleEnviarDeclaracion = async () => {
+    setDeclaracionSending(true)
+    try {
+      const res = await fetch(`/api/turnos/${turno.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ generar_declaracion_jurada: true }),
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        alert(payload?.error || "No se pudo generar la declaración jurada.")
+        return
+      }
+      const declaracion = payload?.declaracion_jurada as DeclaracionTurnoPayload | null
+      if (!declaracion?.id) {
+        alert("No se pudo generar la declaración jurada para este turno.")
+        return
+      }
+      setDeclaracionPayload(declaracion)
+      setDeclaracionRespuestaId(String(declaracion.id))
+      setDeclaracionEstado(String(declaracion.estado || "pendiente"))
+      await mutateDeclaracionDetalle()
+      if (declaracion.whatsapp_url) {
+        window.open(declaracion.whatsapp_url, "_blank", "noopener,noreferrer")
+      } else if (declaracion.link) {
+        await navigator.clipboard.writeText(declaracion.link)
+        alert("Link de DJ copiado. La clienta no tiene teléfono válido para WhatsApp.")
+      } else {
+        alert("DJ generada, pero no se pudo obtener el link para compartir.")
+      }
+    } catch {
+      alert("No se pudo generar la declaración jurada.")
+    } finally {
+      setDeclaracionSending(false)
+    }
+  }
+
   const handleSubmit = async () => {
     setSubmitAttempted(true)
     if (precioServicioInvalido || serviciosInvalidos || productosInvalidos) return
+    if (declaracionRequerida && !declaracionCompletada) {
+      const detalle = !declaracionEnviada
+        ? "no fue enviada"
+        : `está ${declaracionEstadoLabel(declaracionEstadoActual).toLowerCase()}`
+      if (!confirm(`La declaración jurada ${detalle}. ¿Querés cerrar y cobrar igual?`)) {
+        return
+      }
+    }
     setLoading(true)
     setPendingRefreshAfterFactura(false)
     const shouldShowFacturando = facturar && totalCobrar > 0
@@ -433,6 +539,92 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
                 <p className="text-sm font-medium">Foto del trabajo</p>
               </div>
               <VerTurnoFotoButton turnoId={turno.id} />
+            </div>
+          )}
+          {declaracionRequerida && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">
+                    Declaración jurada{declaracionPlantillaNombre ? ` · ${declaracionPlantillaNombre}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Revisá el estado antes de cerrar y cobrar.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={declaracionEnviada ? "info" : "neutral"}>
+                    {declaracionEnviada ? "Enviada" : "Sin enviar"}
+                  </Badge>
+                  <Badge variant={declaracionCompletada ? "success" : "warning"}>
+                    {declaracionCompletada
+                      ? "Completada"
+                      : declaracionEnviada
+                        ? declaracionEstadoLabel(declaracionEstadoActual)
+                        : "Sin completar"}
+                  </Badge>
+                </div>
+              </div>
+              {!declaracionCompletada && (
+                <p className="text-xs text-[color:var(--status-warning-fg)]">
+                  Si cerrás y cobrás ahora, se confirmará con aviso porque la DJ aún no está completada.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleEnviarDeclaracion}
+                  disabled={declaracionSending || loading}
+                  className="gap-1.5"
+                >
+                  {declaracionSending ? (
+                    <>
+                      <Loader2Icon className="h-4 w-4 animate-spin" />
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircleIcon className="h-4 w-4" />
+                      {declaracionEnviada ? "Reenviar DJ" : "Enviar DJ"}
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    if (!declaracionLink) return
+                    try {
+                      await navigator.clipboard.writeText(declaracionLink)
+                      alert("Link de DJ copiado.")
+                    } catch {
+                      alert("No se pudo copiar el link de DJ.")
+                    }
+                  }}
+                  disabled={!declaracionLink}
+                  className="gap-1.5"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                  Copiar link DJ
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => declaracionLink && window.open(declaracionLink, "_blank", "noopener,noreferrer")}
+                  disabled={!declaracionLink}
+                  className="gap-1.5"
+                >
+                  <ExternalLinkIcon className="h-4 w-4" />
+                  Abrir link DJ
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeclaracionViewOpen(true)}
+                  disabled={!declaracionRespuestaId}
+                >
+                  Ver DJ
+                </Button>
+              </div>
             </div>
           )}
             <div className="grid gap-3 md:grid-cols-3">
@@ -895,6 +1087,91 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
             </Button>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={declaracionViewOpen} onOpenChange={setDeclaracionViewOpen}>
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Declaración jurada
+            {declaracionDetalle?.plantilla?.nombre ? ` · ${declaracionDetalle.plantilla.nombre}` : ""}
+          </DialogTitle>
+        </DialogHeader>
+        {!declaracionRespuestaId ? (
+          <p className="text-sm text-muted-foreground">La DJ todavía no fue generada para este turno.</p>
+        ) : declaracionDetalleLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando declaración jurada...</p>
+        ) : declaracionDetalle?.error ? (
+          <p className="text-sm text-destructive">{declaracionDetalle.error}</p>
+        ) : declaracionDetalle ? (
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                variant={
+                  declaracionDetalle.estado === "completada"
+                    ? "success"
+                    : declaracionDetalle.estado === "pendiente"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {declaracionDetalle.estado || "pendiente"}
+              </Badge>
+              {declaracionDetalle.submitted_at && (
+                <span className="text-muted-foreground">
+                  Respondida: {new Date(declaracionDetalle.submitted_at).toLocaleString("es-AR")}
+                </span>
+              )}
+              {declaracionDetalle.id && declaracionDetalle.pdf_disponible && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    window.open(
+                      `/api/declaraciones-juradas/respuestas/${declaracionDetalle.id}/pdf`,
+                      "_blank",
+                      "noopener,noreferrer",
+                    )
+                  }
+                >
+                  Ver PDF
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-md border p-3">
+              {Object.keys(declaracionDetalle.respuestas || {}).length === 0 ? (
+                <p className="text-muted-foreground">Sin respuestas registradas.</p>
+              ) : (
+                Object.entries(declaracionDetalle.respuestas || {}).map(([key, value]) => {
+                  const campo = Array.isArray(declaracionDetalle.plantilla?.campos)
+                    ? declaracionDetalle.plantilla.campos.find((item: any) => item.id === key)
+                    : null
+                  return (
+                    <div key={key} className="grid grid-cols-1 gap-1 sm:grid-cols-[220px_1fr]">
+                      <span className="font-medium">{campo?.label || key}</span>
+                      <span className="text-muted-foreground whitespace-pre-wrap">{String(value || "-")}</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {declaracionDetalle.firma_data_url && (
+              <div className="space-y-1">
+                <p className="font-medium">Firma</p>
+                <img
+                  src={declaracionDetalle.firma_data_url}
+                  alt="Firma de la declaración jurada"
+                  className="max-h-44 w-auto rounded-md border bg-white"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No se pudo cargar la DJ.</p>
+        )}
       </DialogContent>
     </Dialog>
     <FacturaDialog

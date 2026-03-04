@@ -38,6 +38,8 @@ interface TurnoCardProps {
 }
 
 type DeclaracionInicioPayload = {
+  loading?: boolean
+  error?: string | null
   id?: string
   link?: string
   whatsapp_url?: string | null
@@ -83,6 +85,14 @@ export function TurnoCard({
   const canEdit = !editDisabledReason
 
   const handleStatusChange = async (newStatus: string) => {
+    const requiresDeclaracion = newStatus === "en_curso" && Boolean(turno.declaracion_jurada_plantilla_id)
+    if (requiresDeclaracion) {
+      setDeclaracionInicio({
+        loading: true,
+        error: null,
+        plantilla_nombre: turno.declaracion_jurada_plantilla?.nombre || null,
+      })
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/turnos/${turno.id}`, {
@@ -92,12 +102,25 @@ export function TurnoCard({
       })
       const payload = await res.json().catch(() => null)
       if (!res.ok) {
+        if (requiresDeclaracion) setDeclaracionInicio(null)
         alert(payload?.error || "No se pudo actualizar el turno")
         return
       }
       onRefresh()
-      if (newStatus === "en_curso" && payload?.declaracion_jurada?.link) {
-        setDeclaracionInicio(payload.declaracion_jurada as DeclaracionInicioPayload)
+      if (requiresDeclaracion) {
+        if (payload?.declaracion_jurada?.link) {
+          setDeclaracionInicio({
+            ...(payload.declaracion_jurada as DeclaracionInicioPayload),
+            loading: false,
+            error: null,
+          })
+        } else {
+          setDeclaracionInicio({
+            loading: false,
+            error: "No se pudo generar el link de la declaración jurada.",
+            plantilla_nombre: turno.declaracion_jurada_plantilla?.nombre || null,
+          })
+        }
       }
     } finally {
       setLoading(false)
@@ -360,15 +383,28 @@ export function TurnoCard({
       <Dialog open={Boolean(declaracionInicio)} onOpenChange={(open) => !open && setDeclaracionInicio(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Declaración jurada generada</DialogTitle>
+            <DialogTitle>Este servicio requiere declaración jurada</DialogTitle>
             <DialogDescription>
               {declaracionInicio?.plantilla_nombre
-                ? `Se generó el link para "${declaracionInicio.plantilla_nombre}".`
-                : "Se generó el link de declaración jurada para este turno."}
+                ? `Plantilla: "${declaracionInicio.plantilla_nombre}".`
+                : "Se requiere declaración jurada para este turno."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="rounded-md border bg-muted/30 p-3 text-sm break-all">{declaracionInicio?.link || "-"}</div>
+            {declaracionInicio?.loading ? (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <span className="inline-flex items-center gap-2">
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  Generando link...
+                </span>
+              </div>
+            ) : declaracionInicio?.error ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {declaracionInicio.error}
+              </div>
+            ) : (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm break-all">{declaracionInicio?.link || "-"}</div>
+            )}
             <div className="flex flex-wrap gap-2 justify-end">
               <Button
                 type="button"
@@ -382,7 +418,7 @@ export function TurnoCard({
                     alert("No se pudo copiar el link.")
                   }
                 }}
-                disabled={!declaracionInicio?.link}
+                disabled={Boolean(declaracionInicio?.loading) || !declaracionInicio?.link}
               >
                 <CopyIcon className="h-4 w-4 mr-1.5" />
                 Copiar link
@@ -391,7 +427,7 @@ export function TurnoCard({
                 type="button"
                 variant="outline"
                 onClick={() => declaracionInicio?.link && window.open(declaracionInicio.link, "_blank", "noopener,noreferrer")}
-                disabled={!declaracionInicio?.link}
+                disabled={Boolean(declaracionInicio?.loading) || !declaracionInicio?.link}
               >
                 <ExternalLinkIcon className="h-4 w-4 mr-1.5" />
                 Abrir
@@ -405,6 +441,7 @@ export function TurnoCard({
                   }
                   window.open(declaracionInicio.whatsapp_url, "_blank", "noopener,noreferrer")
                 }}
+                disabled={Boolean(declaracionInicio?.loading) || !declaracionInicio?.whatsapp_url}
               >
                 <MessageCircleIcon className="h-4 w-4 mr-1.5" />
                 Enviar por WhatsApp

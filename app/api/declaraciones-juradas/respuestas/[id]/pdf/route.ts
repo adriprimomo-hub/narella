@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/localdb/server"
 import { getTenantId } from "@/lib/localdb/session"
 import { getUserRole } from "@/lib/permissions"
-import { isAdminRole } from "@/lib/roles"
+import { isStaffRole } from "@/lib/roles"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = await createClient()
@@ -12,7 +12,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const role = await getUserRole(db, user.id)
-  if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { id } = await params
   const tenantId = getTenantId(user) || user.id

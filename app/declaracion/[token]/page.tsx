@@ -82,7 +82,7 @@ export default function DeclaracionJuradaPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
-  const [signatureLarge, setSignatureLarge] = useState(false)
+  const signatureLarge = true
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const canvasWrapRef = useRef<HTMLDivElement | null>(null)
   const hasSignatureRef = useRef(false)
@@ -133,18 +133,11 @@ export default function DeclaracionJuradaPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (window.innerWidth < 640) {
-      setSignatureLarge(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
     resizeSignatureCanvas()
     const onResize = () => resizeSignatureCanvas()
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
-  }, [signatureLarge])
+  }, [])
 
   useEffect(() => {
     if (!canvasRef.current || !data?.firma_data_url) return
@@ -372,18 +365,10 @@ export default function DeclaracionJuradaPage() {
                 />
               </div>
               {!readonly && (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    Consejo: usa un dedo o lápiz. Si te cuesta, activa "Firma grande".
-                  </p>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setSignatureLarge((prev) => !prev)}>
-                      {signatureLarge ? "Firma normal" : "Firma grande"}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
-                      Limpiar firma
-                    </Button>
-                  </div>
+                <div className="flex justify-end">
+                  <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
+                    Limpiar firma
+                  </Button>
                 </div>
               )}
             </div>

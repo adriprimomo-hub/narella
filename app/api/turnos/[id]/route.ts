@@ -374,6 +374,7 @@ const turnoUpdateSchema = z
     servicios_agregados: z.array(z.any()).optional(),
     productos_agregados: z.array(z.any()).optional(),
     skip_recursos_check: z.boolean().optional(),
+    generar_declaracion_jurada: z.boolean().optional(),
   })
   .passthrough()
 
@@ -475,6 +476,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const { data: updates, response: validationResponse } = await validateBody(request, turnoUpdateSchema)
   if (validationResponse) return validationResponse
+  const forceDeclaracionJurada = Boolean((updates as any).generar_declaracion_jurada)
+  if ("generar_declaracion_jurada" in updates) {
+    delete (updates as any).generar_declaracion_jurada
+  }
+  const hasRequestedUpdates = Object.keys(updates).length > 0
   const { data: currentTurno, error: currentError } = await db
     .from("turnos")
     .select("*")
@@ -488,6 +494,33 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   if (currentTurno.estado === "completado") {
     return NextResponse.json({ error: "No puedes modificar turnos cerrados" }, { status: 403 })
+  }
+
+  if (forceDeclaracionJurada && !hasRequestedUpdates) {
+    if (isStaffRole(role)) {
+      const empleadaIdStaff = await getEmpleadaIdForUser(db, user.id)
+      if (!empleadaIdStaff) return NextResponse.json({ error: "Staff sin empleada asignada" }, { status: 403 })
+      const isAssigned = currentTurno.empleada_id === empleadaIdStaff || currentTurno.empleada_final_id === empleadaIdStaff
+      if (!isAssigned) {
+        return NextResponse.json({ error: "No tienes acceso a este turno" }, { status: 403 })
+      }
+      if (currentTurno.estado !== "en_curso" && currentTurno.estado !== "pendiente") {
+        return NextResponse.json({ error: "Solo puedes enviar DJ en turnos pendientes o en curso" }, { status: 409 })
+      }
+    }
+    if (currentTurno.estado === "cancelado") {
+      return NextResponse.json({ error: "No puedes generar DJ en turnos cancelados" }, { status: 409 })
+    }
+    const declaracionPayload = await ensureDeclaracionTurnoPayload({
+      db,
+      turno: currentTurno,
+      tenantId,
+      request,
+    })
+    return NextResponse.json({
+      ...currentTurno,
+      declaracion_jurada: declaracionPayload,
+    })
   }
 
   // Staff: restricted update path
@@ -640,7 +673,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const updatedTurno = data?.[0]
     let declaracionPayload: Record<string, unknown> | null = null
     const inicioTurno = updates.estado === "en_curso" && currentTurno.estado === "pendiente"
-    if (inicioTurno && updatedTurno) {
+    const shouldEnsureDeclaracion = (inicioTurno || forceDeclaracionJurada) && updatedTurno
+    if (shouldEnsureDeclaracion) {
       declaracionPayload = await ensureDeclaracionTurnoPayload({
         db,
         turno: updatedTurno,
@@ -858,7 +892,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const estadoPrevio = String(currentTurno.estado || "")
   const estadoActual = String((updates as any).estado || currentTurno.estado || "")
   const inicioTurno = estadoPrevio !== "en_curso" && estadoActual === "en_curso"
-  if (inicioTurno && updatedTurno) {
+  const shouldEnsureDeclaracion = (inicioTurno || forceDeclaracionJurada) && updatedTurno
+  if (shouldEnsureDeclaracion) {
     declaracionPayloadResponse = await ensureDeclaracionTurnoPayload({
       db,
       turno: updatedTurno,
