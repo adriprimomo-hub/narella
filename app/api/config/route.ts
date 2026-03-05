@@ -423,7 +423,13 @@ export async function PUT(request: Request) {
   const allowedConfigColumns = new Set(Object.keys(configLocalActual || {}))
   Object.entries(configPayloadRaw).forEach(([key, value]) => {
     if (value === undefined) return
-    if (!configLocalActual || allowedConfigColumns.size === 0 || allowedConfigColumns.has(key)) {
+    const isExtendedColumn = CONFIG_EXTENDED_COLUMNS.includes(key)
+    if (
+      !configLocalActual ||
+      allowedConfigColumns.size === 0 ||
+      allowedConfigColumns.has(key) ||
+      (supportsExtendedColumns && isExtendedColumn)
+    ) {
       configPayload[key] = value
     }
   })

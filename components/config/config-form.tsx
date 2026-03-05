@@ -28,7 +28,6 @@ interface Usuario {
   factura_emisor_nombre?: string | null
   factura_emisor_domicilio?: string | null
   factura_emisor_telefono?: string | null
-  factura_emisor_email?: string | null
   wa_template_confirmaciones?: string | null
   wa_template_facturas_giftcards?: string | null
   wa_template_liquidaciones?: string | null
@@ -126,7 +125,6 @@ export function ConfigForm() {
     factura_emisor_nombre: "",
     factura_emisor_domicilio: "",
     factura_emisor_telefono: "",
-    factura_emisor_email: "",
     wa_template_confirmaciones: "",
     wa_template_facturas_giftcards: "",
     wa_template_liquidaciones: "",
@@ -163,7 +161,6 @@ export function ConfigForm() {
         factura_emisor_nombre: config.factura_emisor_nombre || "",
         factura_emisor_domicilio: config.factura_emisor_domicilio || "",
         factura_emisor_telefono: config.factura_emisor_telefono || "",
-        factura_emisor_email: config.factura_emisor_email || "",
         wa_template_confirmaciones: config.wa_template_confirmaciones || "",
         wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
         wa_template_liquidaciones: config.wa_template_liquidaciones || "",
@@ -238,7 +235,6 @@ export function ConfigForm() {
         factura_emisor_nombre: config.factura_emisor_nombre || "",
         factura_emisor_domicilio: config.factura_emisor_domicilio || "",
         factura_emisor_telefono: config.factura_emisor_telefono || "",
-        factura_emisor_email: config.factura_emisor_email || "",
         wa_template_confirmaciones: config.wa_template_confirmaciones || "",
         wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
         wa_template_liquidaciones: config.wa_template_liquidaciones || "",
@@ -272,7 +268,6 @@ export function ConfigForm() {
           factura_emisor_nombre: comunicacionDraft.factura_emisor_nombre || null,
           factura_emisor_domicilio: comunicacionDraft.factura_emisor_domicilio || null,
           factura_emisor_telefono: comunicacionDraft.factura_emisor_telefono || null,
-          factura_emisor_email: comunicacionDraft.factura_emisor_email || null,
           wa_template_confirmaciones: comunicacionDraft.wa_template_confirmaciones || null,
           wa_template_facturas_giftcards: comunicacionDraft.wa_template_facturas_giftcards || null,
           wa_template_liquidaciones: comunicacionDraft.wa_template_liquidaciones || null,
@@ -826,18 +821,6 @@ export function ConfigForm() {
                     value={comunicacionDraft.factura_emisor_telefono}
                     onChange={(e) =>
                       setComunicacionDraft((prev) => ({ ...prev, factura_emisor_telefono: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="config-factura-emisor-email" className="text-xs text-muted-foreground">
-                    Email emisor
-                  </label>
-                  <Input
-                    id="config-factura-emisor-email"
-                    value={comunicacionDraft.factura_emisor_email}
-                    onChange={(e) =>
-                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_email: e.target.value }))
                     }
                   />
                 </div>
