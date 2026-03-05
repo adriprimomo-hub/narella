@@ -7,6 +7,7 @@ import { isAdminRole, normalizeRole } from "@/lib/roles"
 import { validateBody } from "@/lib/api/validation"
 import { maybeHashPassword } from "@/lib/auth/password"
 import { FIXED_TENANT_ID } from "@/lib/tenant-id"
+import { getTenantId } from "@/lib/localdb/session"
 
 const createUserSchema = z.object({
   username: z.string().trim().min(1),
@@ -109,7 +110,7 @@ const requireAdmin = async (): Promise<AdminContext> => {
     return { db, user, tenantId: null, tenantUserIds: [], response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
-  const tenantId = user.tenant_id || user.id
+  const tenantId = getTenantId(user)
   if (!tenantId) {
     return {
       db,

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { db, generateId, findUserById, getLocalUser, getTable, type TableName } from "./store"
 import { persistLocalDb } from "./persist"
+import { getTenantId } from "./session"
 
 type OrderBy = { column: string; ascending: boolean }
 type FilterOp = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "in" | "is"
@@ -224,7 +225,7 @@ export class LocalQuery {
     if (!tenantId) return null
     const ids =
       db.usuarios
-        .filter((user) => (user.tenant_id || user.id) === tenantId)
+        .filter((user) => getTenantId(user as any) === tenantId)
         .map((user) => user.id) || []
     return ids.length > 0 ? ids : [tenantId]
   }
@@ -458,7 +459,7 @@ export const createLocalClient = (userId?: string | null) => {
     : null
   const context: LocalClientContext = {
     userId: baseUser?.id || null,
-    tenantId: baseUser?.tenant_id || baseUser?.id || null,
+    tenantId: getTenantId(baseUser || null),
   }
   return {
     auth: {

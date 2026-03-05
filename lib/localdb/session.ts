@@ -1,3 +1,5 @@
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
+
 export const LOCALDB_SESSION_COOKIE = "narella_session"
 export const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -9,5 +11,7 @@ export const sessionCookieOptions = {
   maxAge: SESSION_COOKIE_MAX_AGE,
 }
 
-export const getTenantId = (user: { id: string; tenant_id?: string | null } | null) =>
-  user?.tenant_id || user?.id || null
+export const getTenantId = (user: { id: string; tenant_id?: string | null } | null) => {
+  if (!user) return null
+  return user.tenant_id || FIXED_TENANT_ID || user.id || null
+}

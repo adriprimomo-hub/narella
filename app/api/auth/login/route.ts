@@ -9,6 +9,7 @@ import { clearRateLimit, getClientId, rateLimit } from "@/lib/rate-limit"
 import { hashPassword, isPasswordHashed, verifyPassword } from "@/lib/auth/password"
 import { persistLocalDb } from "@/lib/localdb/persist"
 import { createSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase/server"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 const loginSchema = z.object({
   username: z.string().trim().min(1),
@@ -83,6 +84,20 @@ export async function POST(request: Request) {
   }
 
   const { user, storedPassword } = matches[0]
+
+  if (!user.tenant_id) {
+    if (isSupabaseConfigured()) {
+      const supabase = createSupabaseAdminClient()
+      const { error: tenantUpdateError } = await supabase.from("usuarios").update({ tenant_id: FIXED_TENANT_ID }).eq("id", user.id)
+      if (tenantUpdateError) {
+        return NextResponse.json({ error: "No se pudo normalizar el tenant del usuario" }, { status: 500 })
+      }
+    } else {
+      user.tenant_id = FIXED_TENANT_ID
+      persistLocalDb(db as any)
+    }
+    user.tenant_id = FIXED_TENANT_ID
+  }
 
   if (!isPasswordHashed(storedPassword)) {
     const nextHash = await hashPassword(password)

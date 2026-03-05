@@ -2,7 +2,7 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { createLocalClient } from "./query"
-import { LOCALDB_SESSION_COOKIE } from "./session"
+import { getTenantId, LOCALDB_SESSION_COOKIE } from "./session"
 import { parseSessionToken } from "./session-token"
 import { createSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase/server"
 
@@ -162,7 +162,7 @@ export async function createClient() {
     const { data, error } = await supabase.from("usuarios").select("*").eq("id", sessionId).maybeSingle()
     if (!error && data) {
       user = data
-      const tenantId = user.tenant_id || user.id || null
+      const tenantId = getTenantId(user)
       if (tenantId) {
         tenantContext = { tenantId, tenantUserIds: [tenantId] }
       }
