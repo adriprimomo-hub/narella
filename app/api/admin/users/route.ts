@@ -65,6 +65,19 @@ const resolveTenantScope = async (tenantId: string): Promise<{ data: TenantScope
 
 const isInTenantScope = (id: string, tenantUserIds: string[]) => tenantUserIds.includes(id)
 
+const isTenantOwnerUser = async (userId: string, tenantUserIds: string[]) => {
+  const { data, error } = await localAdmin
+    .from("usuarios")
+    .select("id")
+    .eq("tenant_id", userId)
+    .neq("id", userId)
+    .in("id", tenantUserIds)
+    .limit(1)
+
+  if (error) return { isOwner: false, error: error.message }
+  return { isOwner: (data || []).length > 0, error: null as string | null }
+}
+
 const validateEmpleadaScope = async (empleadaId: string, tenantUserIds: string[]) => {
   const { data, error } = await localAdmin
     .from("empleadas")
@@ -310,6 +323,11 @@ export async function DELETE(request: Request) {
     if (parsed.data.id === tenantId) {
       return NextResponse.json({ error: "No puedes eliminar el usuario admin owner del tenant" }, { status: 400 })
     }
+    const ownerCheck = await isTenantOwnerUser(parsed.data.id, tenantUserIds)
+    if (ownerCheck.error) return NextResponse.json({ error: ownerCheck.error }, { status: 500 })
+    if (ownerCheck.isOwner) {
+      return NextResponse.json({ error: "No puedes eliminar el usuario owner del tenant" }, { status: 400 })
+    }
 
     const { error: deleteError } = await localAdmin.auth.admin.deleteUser(parsed.data.id)
     if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 400 })
@@ -328,6 +346,11 @@ export async function DELETE(request: Request) {
   }
   if (payload.id === tenantId) {
     return NextResponse.json({ error: "No puedes eliminar el usuario admin owner del tenant" }, { status: 400 })
+  }
+  const ownerCheck = await isTenantOwnerUser(payload.id, tenantUserIds)
+  if (ownerCheck.error) return NextResponse.json({ error: ownerCheck.error }, { status: 500 })
+  if (ownerCheck.isOwner) {
+    return NextResponse.json({ error: "No puedes eliminar el usuario owner del tenant" }, { status: 400 })
   }
 
   const { error: deleteError } = await localAdmin.auth.admin.deleteUser(payload.id)

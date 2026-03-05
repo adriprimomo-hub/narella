@@ -7,7 +7,11 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tenant:verify": "node scripts/tenant-recovery.js verify",
+    "tenant:repair": "node scripts/tenant-recovery.js repair",
+    "tenant:repair:apply": "node scripts/tenant-recovery.js repair --apply",
+    "tenant:move-data": "node scripts/tenant-recovery.js move-data"
   },
   "dependencies": {
     "@afipsdk/afip.js": "1.2.2",
