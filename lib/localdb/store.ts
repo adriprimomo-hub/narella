@@ -496,17 +496,12 @@ hydrateLocalDb(db)
 
 const normalizeTenantIds = () => {
   if (!Array.isArray(db.usuarios) || db.usuarios.length === 0) return
-  const adminUser = db.usuarios.find((user) => user.rol === "admin") || db.usuarios[0]
-  if (!adminUser) return
 
   let changed = false
   db.usuarios.forEach((user) => {
-    if (!user.tenant_id || user.tenant_id === "narella") {
-      const nextTenantId = user.rol === "admin" ? user.id : adminUser.id
-      if (user.tenant_id !== nextTenantId) {
-        user.tenant_id = nextTenantId
-        changed = true
-      }
+    if (user.tenant_id !== FIXED_TENANT_ID) {
+      user.tenant_id = FIXED_TENANT_ID
+      changed = true
     }
   })
 

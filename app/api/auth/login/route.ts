@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
   const { user, storedPassword } = matches[0]
 
-  if (!user.tenant_id) {
+  if (user.tenant_id !== FIXED_TENANT_ID) {
     if (isSupabaseConfigured()) {
       const supabase = createSupabaseAdminClient()
       const { error: tenantUpdateError } = await supabase.from("usuarios").update({ tenant_id: FIXED_TENANT_ID }).eq("id", user.id)

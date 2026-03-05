@@ -459,7 +459,7 @@ export const createLocalClient = (userId?: string | null) => {
     : null
   const context: LocalClientContext = {
     userId: baseUser?.id || null,
-    tenantId: getTenantId(baseUser || null),
+    tenantId: baseUser ? getTenantId(baseUser) : null,
   }
   return {
     auth: {
