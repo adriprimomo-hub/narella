@@ -32,7 +32,7 @@ export async function GET() {
     } = await db.auth.getUser()
 
     if (user) {
-      const tenantId = getTenantId(user) || user.id
+      const tenantId = getTenantId(user)
       const { data: tenantUser } = await db
         .from("usuarios")
         .select("factura_logo_url")
@@ -50,3 +50,4 @@ export async function GET() {
   const dataUrl = resolveLogoDataUrl()
   return NextResponse.json({ data_url: dataUrl || null }, { headers: { "Cache-Control": "no-store" } })
 }
+

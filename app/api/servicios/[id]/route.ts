@@ -58,7 +58,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -154,7 +154,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -167,3 +167,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
+

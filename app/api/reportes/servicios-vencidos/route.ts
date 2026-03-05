@@ -121,7 +121,7 @@ export async function GET(request: Request) {
 
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const url = new URL(request.url)
   const thresholdDays = resolveThresholdDays(url.searchParams.get("dias"))
@@ -286,3 +286,4 @@ export async function GET(request: Request) {
     items: pageItems,
   })
 }
+

@@ -164,7 +164,13 @@ export async function createClient() {
       user = data
       const tenantId = getTenantId(user)
       if (tenantId) {
-        tenantContext = { tenantId, tenantUserIds: [tenantId] }
+        const tenantUserIds = new Set<string>([tenantId])
+        if (user.id) tenantUserIds.add(String(user.id))
+        const { data: tenantRows } = await supabase.from("usuarios").select("id").eq("tenant_id", tenantId)
+        ;(tenantRows || []).forEach((row: any) => {
+          if (row?.id) tenantUserIds.add(String(row.id))
+        })
+        tenantContext = { tenantId, tenantUserIds: Array.from(tenantUserIds) }
       }
     }
   }

@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { id } = await params
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data, error } = await db
     .from("declaraciones_juradas_respuestas")
     .select("pdf_base64, pdf_filename")
@@ -48,3 +48,4 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     },
   })
 }
+

@@ -67,7 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     updates.campos = campos
   }
 
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data, error } = await db
     .from("declaraciones_juradas_plantillas")
     .update(updates)
@@ -91,7 +91,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { id } = await params
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { error } = await db
     .from("declaraciones_juradas_plantillas")
     .delete()
@@ -101,3 +101,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (error) return NextResponse.json({ error: error.message || "No se pudo eliminar la plantilla" }, { status: 500 })
   return NextResponse.json({ success: true })
 }
+

@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   const username = user.username || (user.user_metadata as any)?.username || user.id
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const url = new URL(request.url)
   const fechaInicio = url.searchParams.get("fecha_inicio")
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
   const role = await getUserRole(db, user.id)
   if (isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data: payload, response: validationResponse } = await validateBody(request, createTurnoSchema)
   if (validationResponse) return validationResponse
   const {
@@ -291,3 +291,4 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data[0])
 }
+

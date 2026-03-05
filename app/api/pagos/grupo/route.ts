@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -715,5 +715,6 @@ export async function POST(request: Request) {
     factura_error: facturaError,
   })
 }
+
 
 

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
     if (!user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
-    const tenantId = getTenantId(user) || user.id
+    const tenantId = getTenantId(user)
     // Obtener turno con datos del cliente, servicio y empleada
     const { data: turno, error: turnoError } = await db
       .from("turnos")
@@ -184,4 +184,5 @@ export async function POST(req: NextRequest, { params }: SendWhatsAppRouteContex
     return NextResponse.json({ error: "Error al procesar la solicitud" }, { status: 500 })
   }
 }
+
 

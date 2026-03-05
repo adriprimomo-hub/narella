@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const url = new URL(request.url)
   const pagination = readPaginationParams(url.searchParams, { defaultPageSize: MEDIUM_LARGE_PAGE_SIZE })
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -290,5 +290,6 @@ export async function POST(request: Request) {
     factura_error: facturaError,
   })
 }
+
 
 

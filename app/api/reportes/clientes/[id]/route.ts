@@ -56,7 +56,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   // Obtener info cliente
   const { data: cliente } = await db.from("clientes").select("*").eq("id", id).eq("usuario_id", tenantId).single()
@@ -222,3 +222,4 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     facturas: facturasEmitidas,
   })
 }
+

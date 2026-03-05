@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role) && role !== "recepcion") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const url = new URL(request.url)
   const queryText = url.searchParams.get("q")?.trim() || ""
@@ -134,3 +134,4 @@ export async function GET(request: Request) {
 
   return NextResponse.json(sanitized)
 }
+

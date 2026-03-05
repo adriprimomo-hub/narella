@@ -95,7 +95,7 @@ const resolveManualActor = async () => {
     return { userId: null, tenantId: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
-  return { userId: user.id, tenantId: getTenantId(user) || user.id, error: null as NextResponse | null }
+  return { userId: user.id, tenantId: getTenantId(user), error: null as NextResponse | null }
 }
 
 const normalizePayloadItemsFromRow = (raw: unknown): FacturaItem[] => {
@@ -513,3 +513,4 @@ export async function GET(request: NextRequest) {
   }
   return runRetryLoopManual(request)
 }
+

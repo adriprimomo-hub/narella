@@ -470,7 +470,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role) && !isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -918,9 +918,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const role = await getUserRole(db, user.id)
   if (isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { error } = await db.from("turnos").delete().eq("id", id).eq("usuario_id", tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
+

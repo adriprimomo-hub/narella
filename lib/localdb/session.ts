@@ -11,7 +11,9 @@ export const sessionCookieOptions = {
   maxAge: SESSION_COOKIE_MAX_AGE,
 }
 
-export const getTenantId = (user: { id: string; tenant_id?: string | null } | null) => {
+export function getTenantId(user: { id: string; tenant_id?: string | null }): string
+export function getTenantId(user: null | undefined): null
+export function getTenantId(user: { id: string; tenant_id?: string | null } | null | undefined) {
   if (!user) return null
   return user.tenant_id || FIXED_TENANT_ID || user.id || null
 }

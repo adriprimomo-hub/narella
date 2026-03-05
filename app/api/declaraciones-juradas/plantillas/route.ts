@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const url = new URL(request.url)
   const onlyActive = url.searchParams.get("active") === "1"
 
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   }
 
   const nowIso = new Date().toISOString()
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data, error } = await db
     .from("declaraciones_juradas_plantillas")
     .insert([
@@ -96,3 +96,4 @@ export async function POST(request: Request) {
 
   return NextResponse.json(sanitizePlantilla(data))
 }
+

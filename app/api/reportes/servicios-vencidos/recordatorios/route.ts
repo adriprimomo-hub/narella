@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, recordatorioSchema)
   if (validationResponse) return validationResponse
@@ -47,3 +47,4 @@ export async function POST(request: Request) {
     enviado_at: nowIso,
   })
 }
+

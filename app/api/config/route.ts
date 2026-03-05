@@ -284,7 +284,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const role = await getUserRole(db, user.id)
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: usuario, error: userError } = await getUsuarioConfigRow(db, tenantId)
   if (userError && !isMissingTableError(userError, "usuarios")) {
@@ -353,7 +353,7 @@ export async function PUT(request: Request) {
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data: body, response: validationResponse } = await validateBody(request, configSchema)
   if (validationResponse) return validationResponse
   const {
@@ -502,3 +502,4 @@ export async function PUT(request: Request) {
     giftcard_template_data_url: configLocalRefrescada?.giftcard_template_data_url || null,
   })
 }
+

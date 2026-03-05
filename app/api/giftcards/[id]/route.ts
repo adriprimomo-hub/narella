@@ -58,7 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, giftcardUpdateSchema)
   if (validationResponse) return validationResponse
@@ -209,7 +209,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: current } = await db
     .from("giftcards")
@@ -234,3 +234,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
+

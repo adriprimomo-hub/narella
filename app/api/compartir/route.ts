@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, shareSchema)
   if (validationResponse) return validationResponse
@@ -256,3 +256,4 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ url, token, expires_at: expiresAt })
 }
+

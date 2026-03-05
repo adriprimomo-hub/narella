@@ -46,7 +46,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, senaUpdateSchema)
   if (validationResponse) return validationResponse
@@ -81,7 +81,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { error } = await db.from("senas").delete().eq("id", id).eq("usuario_id", tenantId)
 
@@ -98,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, senaIncrementoSchema)
   if (validationResponse) return validationResponse
@@ -269,3 +269,4 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     factura_error: facturaError,
   })
 }
+

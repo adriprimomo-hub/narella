@@ -40,7 +40,7 @@ export async function GET() {
     } = await db.auth.getUser()
 
     if (user) {
-      const tenantId = getTenantId(user) || user.id
+      const tenantId = getTenantId(user)
       const tenantTemplate = await resolveTenantGiftcardTemplate(db, tenantId)
       if (tenantTemplate) {
         return NextResponse.json(
@@ -59,3 +59,4 @@ export async function GET() {
     { headers: { "Cache-Control": "no-store" } },
   )
 }
+

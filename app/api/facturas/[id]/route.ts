@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role) && role !== "recepcion") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
 
   const { data, error } = await db
     .from("facturas")
@@ -30,3 +30,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { pdf_base64: _pdf, ...rest } = data || {}
   return NextResponse.json({ ...rest, has_pdf: Boolean(data?.pdf_base64 || data?.pdf_storage_path) })
 }
+

@@ -2,6 +2,7 @@
 import { randomUUID } from "crypto"
 import { hydrateLocalDb, persistLocalDb } from "./persist"
 import { hashPasswordSync, isPasswordHashed } from "@/lib/auth/password"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 type HorarioLocal = { dia: number; desde: string; hasta: string; activo: boolean }
 
@@ -694,7 +695,7 @@ const ensureConfiguracionTable = () => {
 
   if (Array.isArray(db.usuarios)) {
     db.usuarios.forEach((user: any) => {
-      const tenantId = user?.tenant_id || user?.id
+      const tenantId = user?.tenant_id || FIXED_TENANT_ID || user?.id
       ensureConfigForTenant(tenantId, Array.isArray(user?.horario_local) ? user.horario_local : null)
       if ("telefono_whatsapp" in user) {
         delete user.telefono_whatsapp

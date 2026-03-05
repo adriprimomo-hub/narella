@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const username = user.username || (user.user_metadata as any)?.username || user.id
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const { data: payload, response: validationResponse } = await validateBody(request, grupoSchema)
   if (validationResponse) return validationResponse
   const cliente_id: string = payload.cliente_id
@@ -242,3 +242,4 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ grupo_id: grupo.id, turnos: data })
 }
+

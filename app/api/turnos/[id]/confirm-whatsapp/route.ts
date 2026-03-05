@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
     if (!user) {
       return Response.json({ error: "No autorizado" }, { status: 401 })
     }
-    const tenantId = getTenantId(user) || user.id
+    const tenantId = getTenantId(user)
     // Obtener turno con cliente/servicio
     const { data: turno, error: turnoError } = await db
       .from("turnos")
@@ -132,4 +132,5 @@ export async function POST(request: Request, { params }: ConfirmWhatsAppRouteCon
     return Response.json({ error: "Error interno" }, { status: 500 })
   }
 }
+
 

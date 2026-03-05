@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
 
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
   } = await db.auth.getUser()
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const tenantId = getTenantId(user) || user.id
+  const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
@@ -212,3 +212,4 @@ export async function POST(request: Request) {
 
   return NextResponse.json(data[0])
 }
+
