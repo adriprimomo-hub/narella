@@ -5,11 +5,11 @@ import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 const createUserSchema = z.object({
   user_id: z.string().min(1),
   username: z.string().trim().min(1),
-  tenant_id: z.string().min(1).optional(),
 })
 
 export async function POST(request: Request) {
@@ -30,15 +30,14 @@ export async function POST(request: Request) {
 
     const { data: payload, response: validationResponse } = await validateBody(request, createUserSchema)
     if (validationResponse) return validationResponse
-    const { user_id, username, tenant_id } = payload
-    const currentTenantId = user.tenant_id || user.id
+    const { user_id, username } = payload
 
     const { error } = await localAdmin.from("usuarios").upsert(
       {
         id: user_id,
         username,
         rol: "recepcion",
-        tenant_id: tenant_id || currentTenantId,
+        tenant_id: FIXED_TENANT_ID,
       },
       { onConflict: "id" },
     )

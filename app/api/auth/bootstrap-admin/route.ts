@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { localAdmin } from "@/lib/localdb/admin"
 import { validateBody } from "@/lib/api/validation"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 const TEST_LOGIN_USERNAME = "admin"
 const TEST_LOGIN_PASSWORD = "admin"
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
 
   const { error: upsertError } = await localAdmin
     .from("usuarios")
-    .upsert({ id: user.id, username, rol: "admin", tenant_id: user.id }, { onConflict: "id" })
+    .upsert({ id: user.id, username, rol: "admin", tenant_id: FIXED_TENANT_ID }, { onConflict: "id" })
 
   if (upsertError) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 })

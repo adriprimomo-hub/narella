@@ -4,6 +4,7 @@ import { db, generateId } from "./store"
 import { persistLocalDb } from "./persist"
 import { maybeHashPassword } from "@/lib/auth/password"
 import { createSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase/server"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 const ALLOW_LOCALDB_IN_PRODUCTION = process.env.ALLOW_LOCALDB_IN_PRODUCTION === "true"
 const isLocalFallbackAllowed = process.env.NODE_ENV !== "production" || ALLOW_LOCALDB_IN_PRODUCTION
@@ -23,6 +24,7 @@ const createUserRecord = async (
     id: generateId(),
     username,
     rol,
+    tenant_id: FIXED_TENANT_ID,
     ...(hashedPassword ? { password: hashedPassword, password_hash: hashedPassword } : {}),
     created_at: now,
     updated_at: now,
@@ -53,7 +55,7 @@ const createSupabaseAdmin = () => {
 
       const { data, error } = await supabase
         .from("usuarios")
-        .insert({ username: normalized, rol: "recepcion" })
+        .insert({ username: normalized, rol: "recepcion", tenant_id: FIXED_TENANT_ID })
         .select("*")
         .maybeSingle()
 
@@ -76,6 +78,7 @@ const createSupabaseAdmin = () => {
       const payload: Record<string, unknown> = {
         username: normalized,
         rol: "recepcion",
+        tenant_id: FIXED_TENANT_ID,
       }
       if (passwordHash) payload.password_hash = passwordHash
 

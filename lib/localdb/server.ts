@@ -164,17 +164,7 @@ export async function createClient() {
       user = data
       const tenantId = user.tenant_id || user.id || null
       if (tenantId) {
-        const { data: tenantUsers, error: tenantError } = await supabase
-          .from("usuarios")
-          .select("id")
-          .or(`id.eq.${tenantId},tenant_id.eq.${tenantId}`)
-
-        if (!tenantError && Array.isArray(tenantUsers)) {
-          const ids = new Set<string>([tenantId, ...tenantUsers.map((row: any) => row.id).filter(Boolean)])
-          tenantContext = { tenantId, tenantUserIds: Array.from(ids) }
-        } else {
-          tenantContext = { tenantId, tenantUserIds: [tenantId] }
-        }
+        tenantContext = { tenantId, tenantUserIds: [tenantId] }
       }
     }
   }

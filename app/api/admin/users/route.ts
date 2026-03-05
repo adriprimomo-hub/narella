@@ -6,6 +6,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, normalizeRole } from "@/lib/roles"
 import { validateBody } from "@/lib/api/validation"
 import { maybeHashPassword } from "@/lib/auth/password"
+import { FIXED_TENANT_ID } from "@/lib/tenant-id"
 
 const createUserSchema = z.object({
   username: z.string().trim().min(1),
@@ -156,7 +157,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { response, tenantId, tenantUserIds } = await requireAdmin()
+  const { response, tenantUserIds } = await requireAdmin()
   if (response) return response
 
   const { data: payload, response: validationResponse } = await validateBody(request, createUserSchema)
@@ -195,7 +196,7 @@ export async function POST(request: Request) {
       username,
       password_hash: hashedPassword,
       rol,
-      tenant_id: tenantId,
+      tenant_id: FIXED_TENANT_ID,
       empleada_id: rol === "staff" ? empleadaId : null,
     })
     .select("id")

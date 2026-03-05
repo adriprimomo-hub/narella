@@ -1,0 +1,1 @@
+export const FIXED_TENANT_ID = "9c03e540-2cf1-4742-b938-c550a35683ad"
