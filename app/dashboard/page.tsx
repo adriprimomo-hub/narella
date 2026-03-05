@@ -110,6 +110,7 @@ function DashboardContent() {
       { key: "personal", label: "Personal" },
       { key: "productos", label: "Productos" },
       { key: "inventario", label: "Insumos" },
+      { key: "config", label: "Configuración" },
     ],
     [],
   )

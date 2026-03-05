@@ -12,6 +12,7 @@ import {
   sugerirNumeroFacturaLocal,
   type FacturaRetryPayload,
 } from "@/lib/facturas-registro"
+import { distribuirCobroProductos, splitCobroServicioProductos } from "@/lib/pagos/caja"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -444,26 +445,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Registrar movimiento de caja por el cobro grupal
-  if (montoCobrado > 0) {
-    const { error: cajaGrupoError } = await db.from("caja_movimientos").insert([
-      {
-        usuario_id: tenantId,
-        creado_por_username: username,
-        medio_pago: metodoPago,
-        tipo: "ingreso",
-        monto: montoCobrado,
-        motivo: "Cobro servicios simultaneos",
-        source_tipo: "turno_grupo_pago",
-        source_id: pagoGrupo.id,
-        creado_por: user.id,
-      },
-    ])
-    if (cajaGrupoError) {
-      return NextResponse.json({ error: cajaGrupoError.message }, { status: 500 })
-    }
-  }
-
   // Procesar productos vendidos (a nivel grupo)
   for (const detalle of productosDetalles) {
     const { producto, cantidad, precioUnitario, subtotal, empleada_id, nota } = detalle
@@ -496,22 +477,57 @@ export async function POST(request: Request) {
     if (stockUpdateError) {
       return NextResponse.json({ error: stockUpdateError.message }, { status: 500 })
     }
+  }
 
+  const { montoServiciosCobrado, montoProductosCobrado } = splitCobroServicioProductos({
+    montoCobrado,
+    totalProductos,
+  })
+
+  const productosCajaDistribuidos = distribuirCobroProductos({
+    montoProductosCobrado,
+    items: productosDetalles.map((detalle) => ({
+      item: detalle,
+      monto_bruto: detalle.subtotal,
+    })),
+  })
+
+  for (const item of productosCajaDistribuidos) {
+    if (item.monto_cobrado <= 0) continue
     const { error: cajaProductoError } = await db.from("caja_movimientos").insert([
       {
         usuario_id: tenantId,
         creado_por_username: username,
         medio_pago: metodoPago,
         tipo: "ingreso",
-        monto: subtotal,
-        motivo: `Venta producto: ${producto.nombre}`,
+        monto: item.monto_cobrado,
+        motivo: `Venta producto: ${item.item.producto.nombre}`,
         source_tipo: "producto_venta",
-        source_id: producto.id,
+        source_id: item.item.producto.id,
         creado_por: user.id,
       },
     ])
     if (cajaProductoError) {
       return NextResponse.json({ error: cajaProductoError.message }, { status: 500 })
+    }
+  }
+
+  if (montoServiciosCobrado > 0) {
+    const { error: cajaGrupoError } = await db.from("caja_movimientos").insert([
+      {
+        usuario_id: tenantId,
+        creado_por_username: username,
+        medio_pago: metodoPago,
+        tipo: "ingreso",
+        monto: montoServiciosCobrado,
+        motivo: "Cobro servicios simultaneos",
+        source_tipo: "turno_grupo_pago",
+        source_id: pagoGrupo.id,
+        creado_por: user.id,
+      },
+    ])
+    if (cajaGrupoError) {
+      return NextResponse.json({ error: cajaGrupoError.message }, { status: 500 })
     }
   }
 

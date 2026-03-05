@@ -281,21 +281,23 @@ export function ConfigForm() {
           giftcard_template_data_url: comunicacionDraft.giftcard_template_data_url || null,
         }),
       })
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        const data = await res.json()
         mutate(data, false)
         setConfigMessage("Configuración guardada.")
         setTimeout(() => setConfigMessage(""), 3000)
         return true
       }
+      setConfigMessage(data?.error || "Error al guardar.")
+      return false
     } catch (error) {
       console.error("Error:", error)
+      setConfigMessage("Error al guardar.")
+      return false
     } finally {
       setConfigLoading(false)
     }
-    setConfigMessage("Error al guardar.")
-    return false
   }
 
   const saveConfig = async (nextMetodos: MetodoPagoDraft[], nextHorario: HorarioLocal[]) => {
@@ -315,9 +317,9 @@ export function ConfigForm() {
           horario_local: horarioPayload,
         }),
       })
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        const data = await res.json()
         mutate(data, false)
         setMetodosPago(metodosPayload)
         setHorarioLocal(horarioPayload)
@@ -325,13 +327,15 @@ export function ConfigForm() {
         setTimeout(() => setConfigMessage(""), 3000)
         return true
       }
+      setConfigMessage(data?.error || "Error al guardar.")
+      return false
     } catch (error) {
       console.error("Error:", error)
+      setConfigMessage("Error al guardar.")
+      return false
     } finally {
       setConfigLoading(false)
     }
-    setConfigMessage("Error al guardar.")
-    return false
   }
 
   const handleCreateUser = async () => {
@@ -790,8 +794,11 @@ export function ConfigForm() {
               <h4 className="text-sm font-semibold">Factura (branding y emisor)</h4>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Nombre emisor</label>
+                  <label htmlFor="config-factura-emisor-nombre" className="text-xs text-muted-foreground">
+                    Nombre emisor
+                  </label>
                   <Input
+                    id="config-factura-emisor-nombre"
                     value={comunicacionDraft.factura_emisor_nombre}
                     onChange={(e) =>
                       setComunicacionDraft((prev) => ({ ...prev, factura_emisor_nombre: e.target.value }))
@@ -799,8 +806,11 @@ export function ConfigForm() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Domicilio emisor</label>
+                  <label htmlFor="config-factura-emisor-domicilio" className="text-xs text-muted-foreground">
+                    Domicilio emisor
+                  </label>
                   <Input
+                    id="config-factura-emisor-domicilio"
                     value={comunicacionDraft.factura_emisor_domicilio}
                     onChange={(e) =>
                       setComunicacionDraft((prev) => ({ ...prev, factura_emisor_domicilio: e.target.value }))
@@ -808,8 +818,11 @@ export function ConfigForm() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Teléfono emisor</label>
+                  <label htmlFor="config-factura-emisor-telefono" className="text-xs text-muted-foreground">
+                    Teléfono emisor
+                  </label>
                   <Input
+                    id="config-factura-emisor-telefono"
                     value={comunicacionDraft.factura_emisor_telefono}
                     onChange={(e) =>
                       setComunicacionDraft((prev) => ({ ...prev, factura_emisor_telefono: e.target.value }))
@@ -817,8 +830,11 @@ export function ConfigForm() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Email emisor</label>
+                  <label htmlFor="config-factura-emisor-email" className="text-xs text-muted-foreground">
+                    Email emisor
+                  </label>
                   <Input
+                    id="config-factura-emisor-email"
                     value={comunicacionDraft.factura_emisor_email}
                     onChange={(e) =>
                       setComunicacionDraft((prev) => ({ ...prev, factura_emisor_email: e.target.value }))
@@ -827,16 +843,22 @@ export function ConfigForm() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Leyenda</label>
+                <label htmlFor="config-factura-leyenda" className="text-xs text-muted-foreground">
+                  Leyenda
+                </label>
                 <Textarea
+                  id="config-factura-leyenda"
                   rows={2}
                   value={comunicacionDraft.factura_leyenda}
                   onChange={(e) => setComunicacionDraft((prev) => ({ ...prev, factura_leyenda: e.target.value }))}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Leyenda footer</label>
+                <label htmlFor="config-factura-leyenda-footer" className="text-xs text-muted-foreground">
+                  Leyenda footer
+                </label>
                 <Textarea
+                  id="config-factura-leyenda-footer"
                   rows={2}
                   value={comunicacionDraft.factura_leyenda_footer}
                   onChange={(e) =>
@@ -845,8 +867,11 @@ export function ConfigForm() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Logo de factura</label>
+                <label htmlFor="config-factura-logo" className="text-xs text-muted-foreground">
+                  Logo de factura
+                </label>
                 <Input
+                  id="config-factura-logo"
                   type="file"
                   accept="image/*"
                   onChange={async (event) => {
@@ -877,7 +902,11 @@ export function ConfigForm() {
 
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="text-sm font-semibold">Giftcard (plantilla)</h4>
+              <label htmlFor="config-giftcard-template" className="text-xs text-muted-foreground">
+                Plantilla personalizada
+              </label>
               <Input
+                id="config-giftcard-template"
                 type="file"
                 accept=".pdf,image/*"
                 onChange={async (event) => {
@@ -908,8 +937,11 @@ export function ConfigForm() {
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="text-sm font-semibold">Textos de envío</h4>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Confirmaciones</label>
+                <label htmlFor="config-wa-confirmaciones" className="text-xs text-muted-foreground">
+                  Confirmaciones
+                </label>
                 <Textarea
+                  id="config-wa-confirmaciones"
                   rows={4}
                   value={comunicacionDraft.wa_template_confirmaciones}
                   onChange={(e) =>
@@ -921,8 +953,11 @@ export function ConfigForm() {
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Facturas / Giftcards</label>
+                <label htmlFor="config-wa-facturas-giftcards" className="text-xs text-muted-foreground">
+                  Facturas / Giftcards
+                </label>
                 <Textarea
+                  id="config-wa-facturas-giftcards"
                   rows={3}
                   value={comunicacionDraft.wa_template_facturas_giftcards}
                   onChange={(e) =>
@@ -934,8 +969,11 @@ export function ConfigForm() {
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Liquidaciones</label>
+                <label htmlFor="config-wa-liquidaciones" className="text-xs text-muted-foreground">
+                  Liquidaciones
+                </label>
                 <Textarea
+                  id="config-wa-liquidaciones"
                   rows={3}
                   value={comunicacionDraft.wa_template_liquidaciones}
                   onChange={(e) =>
@@ -947,8 +985,11 @@ export function ConfigForm() {
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Servicios vencidos</label>
+                <label htmlFor="config-wa-servicios-vencidos" className="text-xs text-muted-foreground">
+                  Servicios vencidos
+                </label>
                 <Textarea
+                  id="config-wa-servicios-vencidos"
                   rows={3}
                   value={comunicacionDraft.wa_template_servicios_vencidos}
                   onChange={(e) =>
@@ -960,8 +1001,11 @@ export function ConfigForm() {
                 </p>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Declaraciones juradas</label>
+                <label htmlFor="config-wa-declaraciones-juradas" className="text-xs text-muted-foreground">
+                  Declaraciones juradas
+                </label>
                 <Textarea
+                  id="config-wa-declaraciones-juradas"
                   rows={3}
                   value={comunicacionDraft.wa_template_declaraciones_juradas}
                   onChange={(e) =>

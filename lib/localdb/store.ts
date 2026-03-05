@@ -484,6 +484,8 @@ export const db: any = {
   producto_empleada_comisiones: [] as ProductoEmpleadaComision[],
   recordatorios: [],
   servicio_vencido_recordatorios: [],
+  declaraciones_juradas_plantillas: [],
+  declaraciones_juradas_respuestas: [],
   confirmation_tokens: [],
   share_links: [] as ShareLink[],
   empleada_ausencias: [] as EmpleadaAusencia[],
@@ -632,6 +634,21 @@ const ensureShareLinksTable = () => {
 }
 
 ensureShareLinksTable()
+
+const ensureDeclaracionesJuradasTables = () => {
+  let changed = false
+  if (!("declaraciones_juradas_plantillas" in db) || !Array.isArray((db as any).declaraciones_juradas_plantillas)) {
+    ;(db as any).declaraciones_juradas_plantillas = []
+    changed = true
+  }
+  if (!("declaraciones_juradas_respuestas" in db) || !Array.isArray((db as any).declaraciones_juradas_respuestas)) {
+    ;(db as any).declaraciones_juradas_respuestas = []
+    changed = true
+  }
+  if (changed) persistLocalDb(db as any)
+}
+
+ensureDeclaracionesJuradasTables()
 
 const ensureServicioVencidoRecordatoriosTable = () => {
   if (!("servicio_vencido_recordatorios" in db)) {

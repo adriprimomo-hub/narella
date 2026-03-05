@@ -15,6 +15,7 @@ import { showSystemConfirm } from "@/lib/system-dialogs"
 type DeclaracionCampoTipo = "text" | "textarea" | "number" | "date" | "yes_no" | "select"
 
 type DeclaracionCampoDraft = {
+  uid: string
   id: string
   label: string
   tipo: DeclaracionCampoTipo
@@ -54,7 +55,10 @@ type PlantillaFormState = {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
+const createFieldUid = () => `campo-${Math.random().toString(36).slice(2, 10)}`
+
 const createEmptyField = (): DeclaracionCampoDraft => ({
+  uid: createFieldUid(),
   id: "",
   label: "",
   tipo: "text",
@@ -83,6 +87,7 @@ const mapPlantillaToForm = (plantilla: DeclaracionPlantilla): PlantillaFormState
   campos:
     Array.isArray(plantilla.campos) && plantilla.campos.length
       ? plantilla.campos.map((campo) => ({
+          uid: createFieldUid(),
           id: campo.id || "",
           label: campo.label || "",
           tipo: campo.tipo || "text",
@@ -253,16 +258,22 @@ export function DeclaracionesJuradasManager() {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <label className="text-sm font-medium">Nombre</label>
+                <label htmlFor="declaracion-plantilla-nombre" className="text-sm font-medium">
+                  Nombre
+                </label>
                 <Input
+                  id="declaracion-plantilla-nombre"
                   value={form.nombre}
                   onChange={(event) => setForm((prev) => ({ ...prev, nombre: event.target.value }))}
                   placeholder="Ej: Consentimiento depilación láser"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">Descripción</label>
+                <label htmlFor="declaracion-plantilla-descripcion" className="text-sm font-medium">
+                  Descripción
+                </label>
                 <Input
+                  id="declaracion-plantilla-descripcion"
                   value={form.descripcion}
                   onChange={(event) => setForm((prev) => ({ ...prev, descripcion: event.target.value }))}
                   placeholder="Opcional"
@@ -271,8 +282,11 @@ export function DeclaracionesJuradasManager() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium">Texto de introducción</label>
+              <label htmlFor="declaracion-plantilla-intro" className="text-sm font-medium">
+                Texto de introducción
+              </label>
               <Textarea
+                id="declaracion-plantilla-intro"
                 value={form.texto_intro}
                 onChange={(event) => setForm((prev) => ({ ...prev, texto_intro: event.target.value }))}
                 placeholder="Texto legal o informativo para la clienta"
@@ -314,7 +328,7 @@ export function DeclaracionesJuradasManager() {
               </div>
               <div className="space-y-2">
                 {form.campos.map((campo, index) => (
-                  <div key={`campo-${index}`} className="rounded-md border p-3 space-y-2">
+                  <div key={campo.uid} className="rounded-md border p-3 space-y-2">
                     <div className="grid gap-2 sm:grid-cols-3">
                       <Input
                         value={campo.label}

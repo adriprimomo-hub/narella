@@ -347,16 +347,17 @@ export default function DeclaracionJuradaPage() {
           {data.plantilla?.requiere_firma && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
+                <p id="firma-label" className="text-sm font-medium">
                   Firma
                   <span className="text-destructive"> *</span>
-                </label>
+                </p>
               </div>
               <div ref={canvasWrapRef} className="rounded-md border bg-white p-2">
                 <canvas
                   ref={canvasRef}
                   className="w-full rounded-sm bg-white touch-none"
                   style={{ touchAction: "none" }}
+                  aria-labelledby="firma-label"
                   onPointerDown={readonly ? undefined : startDraw}
                   onPointerMove={readonly ? undefined : draw}
                   onPointerUp={readonly ? undefined : stopDraw}

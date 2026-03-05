@@ -168,74 +168,52 @@ export async function POST(request: Request) {
   const empleadaId = payload.empleada_id ? payload.empleada_id.toString() : null
   const hashedPassword = await maybeHashPassword(password)
 
-  if (rol === "staff" && empleadaId) {
+  if (rol === "staff") {
+    if (!empleadaId) {
+      return NextResponse.json({ error: "Debes seleccionar una empleada para usuarios staff" }, { status: 400 })
+    }
     const empleadaScope = await validateEmpleadaScope(empleadaId, tenantUserIds)
     if (!empleadaScope.ok) {
       return NextResponse.json({ error: empleadaScope.error }, { status: 400 })
     }
   }
 
-  const { data: existingUsernameUser, error: existingUsernameError } = await localAdmin
+  const { data: existingTenantUsernameRows, error: existingUsernameError } = await localAdmin
     .from("usuarios")
-    .select("id, tenant_id, rol")
+    .select("id")
     .eq("username", username)
-    .maybeSingle()
+    .in("id", tenantUserIds)
+    .limit(1)
   if (existingUsernameError) return NextResponse.json({ error: existingUsernameError.message }, { status: 500 })
-
-  if (existingUsernameUser) {
-    const ownerTenantId = existingUsernameUser.tenant_id || null
-    const belongsToCurrentTenant =
-      isInTenantScope(existingUsernameUser.id, tenantUserIds) ||
-      ownerTenantId === tenantId ||
-      existingUsernameUser.id === tenantId
-    const belongsToAnotherTenant = Boolean(ownerTenantId && ownerTenantId !== tenantId)
-    if (!belongsToCurrentTenant && (belongsToAnotherTenant || existingUsernameUser.rol === "admin")) {
-      return NextResponse.json({ error: "El username ya pertenece a otro tenant" }, { status: 409 })
-    }
+  if ((existingTenantUsernameRows || []).length > 0) {
+    return NextResponse.json({ error: "El username ya existe en tu tenant" }, { status: 409 })
   }
 
-  const { data: created, error: createError } = await localAdmin.auth.admin.createUser({
-    username,
-    password,
-    email_confirm: true,
-  })
+  const { data: createdUser, error: createError } = await localAdmin
+    .from("usuarios")
+    .insert({
+      username,
+      password_hash: hashedPassword,
+      rol,
+      tenant_id: tenantId,
+      empleada_id: rol === "staff" ? empleadaId : null,
+    })
+    .select("id")
+    .maybeSingle()
 
-  if (createError) return NextResponse.json({ error: createError.message }, { status: 400 })
-
-  const newUserId = created?.user?.id
-  if (newUserId) {
-    if (!isInTenantScope(newUserId, tenantUserIds)) {
-      const { data: profile, error: profileError } = await localAdmin
-        .from("usuarios")
-        .select("id, tenant_id")
-        .eq("id", newUserId)
-        .maybeSingle()
-      if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 })
-      if (profile) {
-        const ownerTenantId = profile.tenant_id || null
-        if (ownerTenantId && ownerTenantId !== tenantId) {
-          return NextResponse.json({ error: "El usuario pertenece a otro tenant" }, { status: 409 })
-        }
-      }
+  if (createError) {
+    const message = String(createError.message || "")
+    const lowerMessage = message.toLowerCase()
+    const isUsernameConflict =
+      String((createError as { code?: string }).code || "") === "23505" && lowerMessage.includes("username")
+    if (isUsernameConflict) {
+      return NextResponse.json({ error: "El username ya existe en tu tenant" }, { status: 409 })
     }
-
-    const { error: upsertError } = await localAdmin
-      .from("usuarios")
-      .upsert(
-        {
-          id: newUserId,
-          username,
-          password_hash: hashedPassword,
-          rol,
-          tenant_id: tenantId,
-          empleada_id: rol === "staff" ? empleadaId : null,
-        },
-        { onConflict: "id" },
-      )
-      .select()
-
-    if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 })
+    return NextResponse.json({ error: message || "No se pudo crear el usuario" }, { status: 400 })
   }
+
+  const newUserId = createdUser?.id || null
+  if (!newUserId) return NextResponse.json({ error: "No se pudo resolver el id del nuevo usuario" }, { status: 500 })
 
   return NextResponse.json({ success: true, user_id: newUserId })
 }
@@ -254,24 +232,47 @@ export async function PUT(request: Request) {
 
   const username = payload.username ? payload.username.toLowerCase() : ""
   const password = payload.password || ""
-  const rol = payload.rol ? normalizeRole(payload.rol) : null
-  const empleadaId = payload.empleada_id ? payload.empleada_id.toString() : null
+  const requestedRole = payload.rol ? normalizeRole(payload.rol) : null
+  const requestedEmpleadaId = payload.empleada_id === undefined ? undefined : payload.empleada_id ? payload.empleada_id.toString() : null
+
+  const { data: targetUser, error: targetUserError } = await localAdmin
+    .from("usuarios")
+    .select("id, rol, empleada_id")
+    .eq("id", id)
+    .in("id", tenantUserIds)
+    .maybeSingle()
+  if (targetUserError) return NextResponse.json({ error: targetUserError.message }, { status: 500 })
+  if (!targetUser) return NextResponse.json({ error: "Usuario no encontrado en tu tenant" }, { status: 404 })
+
+  const currentRole = normalizeRole(targetUser.rol)
+  const nextRole = requestedRole || currentRole
+  let nextEmpleadaId = targetUser?.empleada_id ? String(targetUser.empleada_id) : null
+  if (requestedEmpleadaId !== undefined) {
+    nextEmpleadaId = requestedEmpleadaId
+  }
+  if (nextRole !== "staff") {
+    nextEmpleadaId = null
+  }
 
   if (username) {
-    const { data: existingUsernameUser, error: existingUsernameError } = await localAdmin
+    const { data: existingUsernameRows, error: existingUsernameError } = await localAdmin
       .from("usuarios")
       .select("id")
       .eq("username", username)
-      .maybeSingle()
+      .in("id", tenantUserIds)
+      .neq("id", id)
+      .limit(1)
     if (existingUsernameError) return NextResponse.json({ error: existingUsernameError.message }, { status: 500 })
-    if (existingUsernameUser && existingUsernameUser.id !== id && !isInTenantScope(existingUsernameUser.id, tenantUserIds)) {
-      return NextResponse.json({ error: "El username ya pertenece a otro tenant" }, { status: 409 })
+    if ((existingUsernameRows || []).length > 0) {
+      return NextResponse.json({ error: "El username ya existe en tu tenant" }, { status: 409 })
     }
   }
 
-  const effectiveRole = rol || null
-  if ((effectiveRole === "staff" || (effectiveRole === null && payload.empleada_id !== undefined)) && empleadaId) {
-    const empleadaScope = await validateEmpleadaScope(empleadaId, tenantUserIds)
+  if (nextRole === "staff") {
+    if (!nextEmpleadaId) {
+      return NextResponse.json({ error: "Debes seleccionar una empleada para usuarios staff" }, { status: 400 })
+    }
+    const empleadaScope = await validateEmpleadaScope(nextEmpleadaId, tenantUserIds)
     if (!empleadaScope.ok) {
       return NextResponse.json({ error: empleadaScope.error }, { status: 400 })
     }
@@ -288,11 +289,9 @@ export async function PUT(request: Request) {
   const perfilUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (username) perfilUpdates.username = username
   if (password) perfilUpdates.password_hash = await maybeHashPassword(password)
-  if (rol) perfilUpdates.rol = rol
-  if (rol) {
-    perfilUpdates.empleada_id = rol === "staff" ? empleadaId : null
-  } else if (payload.empleada_id !== undefined) {
-    perfilUpdates.empleada_id = empleadaId
+  if (requestedRole) perfilUpdates.rol = requestedRole
+  if (requestedRole || payload.empleada_id !== undefined || nextRole !== currentRole) {
+    perfilUpdates.empleada_id = nextRole === "staff" ? nextEmpleadaId : null
   }
 
   if (Object.keys(perfilUpdates).length > 1) {

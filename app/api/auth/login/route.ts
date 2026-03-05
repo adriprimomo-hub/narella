@@ -46,34 +46,43 @@ export async function POST(request: Request) {
     )
   }
 
-  let user: any = null
+  let candidates: any[] = []
 
   if (isSupabaseConfigured()) {
     const supabase = createSupabaseAdminClient()
-    const { data: row, error } = await supabase
+    const { data: rows, error } = await supabase
       .from("usuarios")
       .select("*")
       .eq("username", username)
-      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: "Error al validar credenciales" }, { status: 500 })
     }
 
-    user = row || null
+    candidates = Array.isArray(rows) ? rows : []
   } else {
-    user = db.usuarios.find((candidate: any) => candidate.username?.toLowerCase() === username) || null
+    candidates = db.usuarios.filter((candidate: any) => candidate.username?.toLowerCase() === username)
   }
 
-  const storedPassword = user?.password_hash || user?.password
-  if (!user || !storedPassword) {
+  const matches: Array<{ user: any; storedPassword: string }> = []
+  for (const candidate of candidates) {
+    const storedPassword = candidate?.password_hash || candidate?.password
+    if (!storedPassword) continue
+    const isValidCandidate = await verifyPassword(password, storedPassword)
+    if (isValidCandidate) {
+      matches.push({ user: candidate, storedPassword })
+    }
+  }
+
+  if (matches.length === 0) {
     return NextResponse.json({ error: "Credenciales inválidas" }, { status: 401 })
   }
 
-  const isValid = await verifyPassword(password, storedPassword)
-  if (!isValid) {
-    return NextResponse.json({ error: "Credenciales inválidas" }, { status: 401 })
+  if (matches.length > 1) {
+    return NextResponse.json({ error: "Hay mas de un usuario con esas credenciales. Cambia username o contraseña." }, { status: 409 })
   }
+
+  const { user, storedPassword } = matches[0]
 
   if (!isPasswordHashed(storedPassword)) {
     const nextHash = await hashPassword(password)

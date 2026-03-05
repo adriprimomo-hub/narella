@@ -12,6 +12,7 @@ import {
   sugerirNumeroFacturaLocal,
   type FacturaRetryPayload,
 } from "@/lib/facturas-registro"
+import { distribuirCobroProductos, splitCobroServicioProductos } from "@/lib/pagos/caja"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -510,29 +511,10 @@ export async function POST(request: Request) {
     }
   }
 
-  // Registrar movimiento de caja por el servicio
-  if (montoCobrado > 0) {
-    const { error: cajaServicioError } = await db.from("caja_movimientos").insert([
-      {
-        usuario_id: tenantId,
-        creado_por_username: username,
-        medio_pago: metodoPago,
-        tipo: "ingreso",
-        monto: montoCobrado,
-        motivo: "Cobro servicio",
-        source_tipo: "turno_pago",
-        source_id: data.id,
-        creado_por: user.id,
-      },
-    ])
-    if (cajaServicioError) {
-      return NextResponse.json({ error: cajaServicioError.message }, { status: 500 })
-    }
-  }
-
   // Procesar productos vendidos
   let totalProductos = 0
   const productosFactura: FacturaItem[] = []
+  const productosCajaItems: Array<{ productoId: string; nombre: string; montoBruto: number }> = []
   for (const prod of productos) {
     if (!prod.producto_id || !prod.cantidad || prod.cantidad <= 0) continue
 
@@ -552,6 +534,11 @@ export async function POST(request: Request) {
     const cantidad = Number(prod.cantidad)
     const subtotal = precioUnitario * cantidad
     totalProductos += subtotal
+    productosCajaItems.push({
+      productoId: producto.id,
+      nombre: producto.nombre || "Producto",
+      montoBruto: subtotal,
+    })
     productosFactura.push({
       tipo: "producto",
       descripcion: `Producto: ${producto.nombre}`,
@@ -599,23 +586,57 @@ export async function POST(request: Request) {
     if (stockUpdateError) {
       return NextResponse.json({ error: stockUpdateError.message }, { status: 500 })
     }
+  }
 
-    // Registrar ingreso en caja por producto
+  const { montoServiciosCobrado, montoProductosCobrado } = splitCobroServicioProductos({
+    montoCobrado,
+    totalProductos,
+  })
+
+  const productosCajaDistribuidos = distribuirCobroProductos({
+    montoProductosCobrado,
+    items: productosCajaItems.map((item) => ({
+      item,
+      monto_bruto: item.montoBruto,
+    })),
+  })
+
+  for (const item of productosCajaDistribuidos) {
+    if (item.monto_cobrado <= 0) continue
     const { error: cajaProductoError } = await db.from("caja_movimientos").insert([
       {
         usuario_id: tenantId,
         creado_por_username: username,
         medio_pago: metodoPago,
         tipo: "ingreso",
-        monto: subtotal,
-        motivo: `Venta producto: ${producto.nombre}`,
+        monto: item.monto_cobrado,
+        motivo: `Venta producto: ${item.item.nombre}`,
         source_tipo: "producto_venta",
-        source_id: prod.producto_id,
+        source_id: item.item.productoId,
         creado_por: user.id,
       },
     ])
     if (cajaProductoError) {
       return NextResponse.json({ error: cajaProductoError.message }, { status: 500 })
+    }
+  }
+
+  if (montoServiciosCobrado > 0) {
+    const { error: cajaServicioError } = await db.from("caja_movimientos").insert([
+      {
+        usuario_id: tenantId,
+        creado_por_username: username,
+        medio_pago: metodoPago,
+        tipo: "ingreso",
+        monto: montoServiciosCobrado,
+        motivo: "Cobro servicio",
+        source_tipo: "turno_pago",
+        source_id: data.id,
+        creado_por: user.id,
+      },
+    ])
+    if (cajaServicioError) {
+      return NextResponse.json({ error: cajaServicioError.message }, { status: 500 })
     }
   }
 

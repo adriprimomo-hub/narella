@@ -3,6 +3,7 @@ import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, isStaffRole, normalizeRole } from "@/lib/roles"
+import { isSupabaseConfigured } from "@/lib/supabase/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -98,6 +99,15 @@ const CONFIG_SELECT_FULL = [
 
 const CONFIG_SELECT_FALLBACK = ["id", "usuario_id", "horario_local", "created_at", "updated_at"].join(", ")
 
+const CONFIG_EXTENDED_COLUMNS = [
+  "wa_template_confirmaciones",
+  "wa_template_facturas_giftcards",
+  "wa_template_liquidaciones",
+  "wa_template_servicios_vencidos",
+  "wa_template_declaraciones_juradas",
+  "giftcard_template_data_url",
+]
+
 const sanitizeUsuario = (value: any) => {
   if (!value) return value
   const {
@@ -143,16 +153,21 @@ const normalizeNullableText = (value: unknown) => {
   return cleaned.length > 0 ? cleaned : null
 }
 
+const hasAnyConfigExtendedColumn = (row: any) => {
+  if (!row || typeof row !== "object") return false
+  return CONFIG_EXTENDED_COLUMNS.some((column) => Object.prototype.hasOwnProperty.call(row, column))
+}
+
 const getUsuarioConfigRow = async (db: any, userId: string) => {
   const full = await db.from("usuarios").select(USER_CONFIG_SELECT_FULL).eq("id", userId).maybeSingle()
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
 
-  const fallback = await db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
-  if (!fallback.error) return fallback
-  if (!isMissingColumnError(fallback.error)) return fallback
+  const wildcard = await db.from("usuarios").select("*").eq("id", userId).maybeSingle()
+  if (!wildcard.error) return wildcard
+  if (!isMissingColumnError(wildcard.error)) return wildcard
 
-  return db.from("usuarios").select("*").eq("id", userId).maybeSingle()
+  return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
 }
 
 const getConfiguracionRow = async (db: any, tenantId: string) => {
@@ -163,20 +178,89 @@ const getConfiguracionRow = async (db: any, tenantId: string) => {
   if (!isMissingColumnError(full.error)) {
     return { data: full.data, error: full.error, supportsExtendedColumns: true }
   }
-  const fallback = await db.from("configuracion").select(CONFIG_SELECT_FALLBACK).eq("usuario_id", tenantId).maybeSingle()
-  if (!fallback.error || !isMissingColumnError(fallback.error)) {
+
+  const wildcard = await db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
+  if (!wildcard.error) {
     return {
-      data: fallback.data,
-      error: fallback.error,
+      data: wildcard.data,
+      error: wildcard.error,
+      supportsExtendedColumns: !wildcard.data || hasAnyConfigExtendedColumn(wildcard.data),
+    }
+  }
+  if (!isMissingColumnError(wildcard.error)) {
+    return {
+      data: wildcard.data,
+      error: wildcard.error,
       supportsExtendedColumns: false,
     }
   }
-  const wildcard = await db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
+
+  const fallback = await db.from("configuracion").select(CONFIG_SELECT_FALLBACK).eq("usuario_id", tenantId).maybeSingle()
   return {
-    data: wildcard.data,
-    error: wildcard.error,
+    data: fallback.data,
+    error: fallback.error,
     supportsExtendedColumns: false,
   }
+}
+
+const getMetodosPagoRows = async (db: any, tenantId: string) => {
+  if (isSupabaseConfigured()) {
+    const scoped = await db
+      .from("metodos_pago_config")
+      .select("*")
+      .eq("usuario_id", tenantId)
+      .order("created_at", { ascending: true })
+
+    if (!scoped.error) {
+      return { data: scoped.data || [], error: null }
+    }
+    if (!isMissingColumnError(scoped.error)) {
+      return { data: null, error: scoped.error }
+    }
+  }
+
+  const legacy = await db.from("metodos_pago_config").select("*").order("created_at", { ascending: true })
+  if (legacy.error) {
+    return { data: null, error: legacy.error }
+  }
+  return { data: legacy.data || [], error: null }
+}
+
+const replaceMetodosPagoRows = async (
+  db: any,
+  tenantId: string,
+  metodosNormalizados: Array<{ nombre: string; activo: boolean }>,
+) => {
+  if (isSupabaseConfigured()) {
+    const scopedDelete = await db
+      .from("metodos_pago_config")
+      .delete()
+      .eq("usuario_id", tenantId)
+      .neq("nombre", "__all__")
+
+    if (!scopedDelete.error) {
+      if (metodosNormalizados.length === 0) return { error: null }
+
+      const scopedInsert = await db
+        .from("metodos_pago_config")
+        .insert(metodosNormalizados.map((item) => ({ ...item, usuario_id: tenantId })))
+
+      if (!scopedInsert.error) return { error: null }
+      if (!isMissingColumnError(scopedInsert.error)) return { error: scopedInsert.error }
+    } else if (!isMissingColumnError(scopedDelete.error)) {
+      return { error: scopedDelete.error }
+    }
+  }
+
+  const legacyDelete = await db.from("metodos_pago_config").delete().neq("nombre", "__all__")
+  if (legacyDelete.error) return { error: legacyDelete.error }
+
+  if (metodosNormalizados.length > 0) {
+    const legacyInsert = await db.from("metodos_pago_config").insert(metodosNormalizados)
+    if (legacyInsert.error) return { error: legacyInsert.error }
+  }
+
+  return { error: null }
 }
 
 const normalizeHorarioLocal = (items: any): HorarioLocal[] => {
@@ -235,11 +319,7 @@ export async function GET() {
     horario_local: horarioLocal,
   }
 
-  const { data: metodos, error: metodoError } =
-    (await db
-      .from("metodos_pago_config")
-      .select("*")
-      .order("created_at", { ascending: true })) || {}
+  const { data: metodos, error: metodoError } = await getMetodosPagoRows(db, tenantId)
 
   if (metodoError && !isMissingTableError(metodoError, "metodos_pago_config")) {
     return NextResponse.json({ error: metodoError.message }, { status: 500 })
@@ -381,17 +461,12 @@ export async function PUT(request: Request) {
       })
     }
 
-    const { error: delError } = await db.from("metodos_pago_config").delete().neq("nombre", "__all__")
-    if (delError) return NextResponse.json({ error: delError.message }, { status: 500 })
-
-    if (metodosNormalizados.length > 0) {
-      const { error: insError } = await db.from("metodos_pago_config").insert(metodosNormalizados)
-      if (insError) return NextResponse.json({ error: insError.message }, { status: 500 })
-    }
+    const { error: replaceError } = await replaceMetodosPagoRows(db, tenantId, metodosNormalizados)
+    if (replaceError) return NextResponse.json({ error: replaceError.message }, { status: 500 })
   }
 
   const { data: usuarioRefrescado } = await getUsuarioConfigRow(db, tenantId)
-  const { data: metodos } = await db.from("metodos_pago_config").select("*").order("created_at", { ascending: true })
+  const { data: metodos } = await getMetodosPagoRows(db, tenantId)
   const { data: configLocalRefrescada } = await getConfiguracionRow(db, tenantId)
 
   return NextResponse.json({
