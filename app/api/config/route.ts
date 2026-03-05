@@ -375,6 +375,10 @@ export async function PUT(request: Request) {
     giftcard_template_data_url,
   } = body || {}
 
+  const requestedExtendedColumns = CONFIG_EXTENDED_COLUMNS.filter((column) =>
+    Object.prototype.hasOwnProperty.call(body || {}, column),
+  )
+
   const { data: usuarioActual } = await getUsuarioConfigRow(db, tenantId)
   const allowedUsuarioColumns = new Set(Object.keys(usuarioActual || {}))
   const userUpdatesRaw: Record<string, unknown> = {
@@ -404,6 +408,16 @@ export async function PUT(request: Request) {
   const { data: configLocalActual, error: readConfigError, supportsExtendedColumns } = await getConfiguracionRow(db, tenantId)
   if (readConfigError && !isMissingTableError(readConfigError, "configuracion")) {
     return NextResponse.json({ error: readConfigError.message }, { status: 500 })
+  }
+  if (!supportsExtendedColumns && requestedExtendedColumns.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "La base de datos no tiene las columnas para guardar templates de mensajes. Ejecuta las migraciones pendientes.",
+        columns: requestedExtendedColumns,
+      },
+      { status: 409 },
+    )
   }
 
   const configPayloadRaw: Record<string, unknown> = {}

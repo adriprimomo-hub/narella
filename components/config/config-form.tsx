@@ -36,6 +36,21 @@ interface Usuario {
   giftcard_template_data_url?: string | null
 }
 
+type ComunicacionDraft = {
+  factura_logo_url: string
+  factura_leyenda: string
+  factura_leyenda_footer: string
+  factura_emisor_nombre: string
+  factura_emisor_domicilio: string
+  factura_emisor_telefono: string
+  wa_template_confirmaciones: string
+  wa_template_facturas_giftcards: string
+  wa_template_liquidaciones: string
+  wa_template_servicios_vencidos: string
+  wa_template_declaraciones_juradas: string
+  giftcard_template_data_url: string
+}
+
 type AdminUser = {
   id: string
   username?: string
@@ -94,6 +109,22 @@ const MESSAGE_PLACEHOLDERS = {
   serviciosVencidos: ["{clienta}", "{cantidad_dias}", "{servicio_vencido}"],
   declaracionesJuradas: ["{clienta}", "{servicio}", "{fecha}", "{hora}", "{link}"],
 }
+const PASSWORD_REQUIRED_MESSAGE = "Ingresa la contraseña."
+
+const toComunicacionDraft = (config?: Usuario | null): ComunicacionDraft => ({
+  factura_logo_url: config?.factura_logo_url || "",
+  factura_leyenda: config?.factura_leyenda || "",
+  factura_leyenda_footer: config?.factura_leyenda_footer || "",
+  factura_emisor_nombre: config?.factura_emisor_nombre || "",
+  factura_emisor_domicilio: config?.factura_emisor_domicilio || "",
+  factura_emisor_telefono: config?.factura_emisor_telefono || "",
+  wa_template_confirmaciones: config?.wa_template_confirmaciones || "",
+  wa_template_facturas_giftcards: config?.wa_template_facturas_giftcards || "",
+  wa_template_liquidaciones: config?.wa_template_liquidaciones || "",
+  wa_template_servicios_vencidos: config?.wa_template_servicios_vencidos || "",
+  wa_template_declaraciones_juradas: config?.wa_template_declaraciones_juradas || "",
+  giftcard_template_data_url: config?.giftcard_template_data_url || "",
+})
 
 export function ConfigForm() {
   const { data: config, mutate } = useSWR<Usuario>("/api/config", fetcher)
@@ -118,20 +149,7 @@ export function ConfigForm() {
   const [showMetodosDialog, setShowMetodosDialog] = useState(false)
   const [showUsuariosDialog, setShowUsuariosDialog] = useState(false)
   const [showComunicacionDialog, setShowComunicacionDialog] = useState(false)
-  const [comunicacionDraft, setComunicacionDraft] = useState({
-    factura_logo_url: "",
-    factura_leyenda: "",
-    factura_leyenda_footer: "",
-    factura_emisor_nombre: "",
-    factura_emisor_domicilio: "",
-    factura_emisor_telefono: "",
-    wa_template_confirmaciones: "",
-    wa_template_facturas_giftcards: "",
-    wa_template_liquidaciones: "",
-    wa_template_servicios_vencidos: "",
-    wa_template_declaraciones_juradas: "",
-    giftcard_template_data_url: "",
-  })
+  const [comunicacionDraft, setComunicacionDraft] = useState<ComunicacionDraft>(toComunicacionDraft())
   const { data: adminUsers, mutate: mutateUsers } = useSWR<{ users: AdminUser[] }>(
     config?.rol === "admin" ? "/api/admin/users" : null,
     fetcher,
@@ -154,20 +172,7 @@ export function ConfigForm() {
         return { ...base, ...match, activo }
       })
       setHorarioLocal(normalizado)
-      setComunicacionDraft({
-        factura_logo_url: config.factura_logo_url || "",
-        factura_leyenda: config.factura_leyenda || "",
-        factura_leyenda_footer: config.factura_leyenda_footer || "",
-        factura_emisor_nombre: config.factura_emisor_nombre || "",
-        factura_emisor_domicilio: config.factura_emisor_domicilio || "",
-        factura_emisor_telefono: config.factura_emisor_telefono || "",
-        wa_template_confirmaciones: config.wa_template_confirmaciones || "",
-        wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
-        wa_template_liquidaciones: config.wa_template_liquidaciones || "",
-        wa_template_servicios_vencidos: config.wa_template_servicios_vencidos || "",
-        wa_template_declaraciones_juradas: config.wa_template_declaraciones_juradas || "",
-        giftcard_template_data_url: config.giftcard_template_data_url || "",
-      })
+      setComunicacionDraft(toComunicacionDraft(config))
     }
   }, [config])
 
@@ -224,24 +229,21 @@ export function ConfigForm() {
     }
   }
 
-  const handleComunicacionDialogChange = (open: boolean) => {
+  const handleComunicacionDialogChange = async (open: boolean) => {
     setShowComunicacionDialog(open)
-    if (open && config) {
+    if (open) {
       setConfigMessage("")
-      setComunicacionDraft({
-        factura_logo_url: config.factura_logo_url || "",
-        factura_leyenda: config.factura_leyenda || "",
-        factura_leyenda_footer: config.factura_leyenda_footer || "",
-        factura_emisor_nombre: config.factura_emisor_nombre || "",
-        factura_emisor_domicilio: config.factura_emisor_domicilio || "",
-        factura_emisor_telefono: config.factura_emisor_telefono || "",
-        wa_template_confirmaciones: config.wa_template_confirmaciones || "",
-        wa_template_facturas_giftcards: config.wa_template_facturas_giftcards || "",
-        wa_template_liquidaciones: config.wa_template_liquidaciones || "",
-        wa_template_servicios_vencidos: config.wa_template_servicios_vencidos || "",
-        wa_template_declaraciones_juradas: config.wa_template_declaraciones_juradas || "",
-        giftcard_template_data_url: config.giftcard_template_data_url || "",
-      })
+      try {
+        const latest = await mutate()
+        const source = latest ?? config
+        if (source) {
+          setComunicacionDraft(toComunicacionDraft(source))
+        }
+      } catch {
+        if (config) {
+          setComunicacionDraft(toComunicacionDraft(config))
+        }
+      }
     }
   }
 
@@ -279,7 +281,7 @@ export function ConfigForm() {
       const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        mutate(data, false)
+        await mutate().catch(() => undefined)
         setConfigMessage("Configuración guardada.")
         setTimeout(() => setConfigMessage(""), 3000)
         return true
@@ -315,7 +317,7 @@ export function ConfigForm() {
       const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        mutate(data, false)
+        await mutate().catch(() => undefined)
         setMetodosPago(metodosPayload)
         setHorarioLocal(horarioPayload)
         setConfigMessage("Configuración guardada.")
@@ -336,7 +338,7 @@ export function ConfigForm() {
   const handleCreateUser = async () => {
     const nextErrors: { username?: string; password?: string; empleada?: string } = {}
     if (!nuevoUsuarioUsername.trim()) nextErrors.username = "Ingresa el usuario."
-    if (!nuevoUsuarioPassword.trim()) nextErrors.password = "Ingresa la contraseña."
+    if (!nuevoUsuarioPassword.trim()) nextErrors.password = PASSWORD_REQUIRED_MESSAGE
     if (nuevoUsuarioRol === "staff" && !nuevoUsuarioEmpleadaId) {
       nextErrors.empleada = "Selecciona una empleada."
     }
