@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
+const PASSWORD_REQUIRED_MESSAGE = "Ingresa la contraseña."
+
 export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -23,7 +25,7 @@ export default function LoginPage() {
     try {
       const nextErrors: { username?: string; password?: string } = {}
       if (!username.trim()) nextErrors.username = "Ingresa el usuario."
-      if (!password.trim()) nextErrors.password = "Ingresa la contraseña."
+      if (!password.trim()) nextErrors.password = PASSWORD_REQUIRED_MESSAGE
       if (Object.keys(nextErrors).length > 0) {
         setErrors(nextErrors)
         return
