@@ -471,9 +471,6 @@ export function ConfigForm() {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold">Mensajes y documentos</h3>
-            <p className="text-xs text-muted-foreground">
-              Personaliza textos de envío.
-            </p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={() => handleComunicacionDialogChange(true)}>
             Editar
@@ -745,9 +742,6 @@ export function ConfigForm() {
         <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Mensajes y documentos</DialogTitle>
-            <DialogDescription>
-              Gestiona los textos de envío.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">

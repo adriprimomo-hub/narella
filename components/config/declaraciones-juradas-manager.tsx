@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -251,9 +251,6 @@ export function DeclaracionesJuradasManager() {
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{form.id ? "Editar declaración jurada" : "Nueva declaración jurada"}</DialogTitle>
-            <DialogDescription>
-              Define el texto, campos personalizados y firma para enviar a la clienta.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -329,7 +326,7 @@ export function DeclaracionesJuradasManager() {
               <div className="space-y-2">
                 {form.campos.map((campo, index) => (
                   <div key={campo.uid} className="rounded-md border p-3 space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <Input
                         value={campo.label}
                         onChange={(event) =>
@@ -341,18 +338,6 @@ export function DeclaracionesJuradasManager() {
                           }))
                         }
                         placeholder="Etiqueta del campo"
-                      />
-                      <Input
-                        value={campo.id}
-                        onChange={(event) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            campos: prev.campos.map((item, idx) =>
-                              idx === index ? { ...item, id: event.target.value } : item,
-                            ),
-                          }))
-                        }
-                        placeholder="ID interno (opcional)"
                       />
                       <Select
                         value={campo.tipo}
