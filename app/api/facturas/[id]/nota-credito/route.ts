@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
-import { generarFacturaPdf, resolveFacturacionConfig, type FacturaResultado } from "@/lib/facturacion"
+import { generarFacturaPdf, type FacturaResultado } from "@/lib/facturacion"
 import { resolveFacturaPdfPersistence } from "@/lib/facturas-registro"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
+import { resolveTenantFacturacionConfig } from "@/lib/tenant-config"
 
 const notaCreditoSchema = z.object({
   monto: z.coerce.number().positive().optional(),
@@ -45,6 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const username = user.username || (user.user_metadata as any)?.username || user.id
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const tenantId = getTenantId(user)
 
   const { data: payload, response: validationResponse } = await validateBody(request, notaCreditoSchema)
   if (validationResponse) return validationResponse
@@ -53,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .from("facturas")
     .select("*")
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (error || !factura) {
@@ -81,14 +84,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const motivo = typeof payload?.motivo === "string" ? payload.motivo.trim() : ""
 
-  const config = await resolveFacturacionConfig()
+  const config = await resolveTenantFacturacionConfig(db, tenantId)
   const puntoVenta = Number(factura.punto_venta || config?.afip_punto_venta || 1)
   const cbteTipo = mapCbteTipoToNotaCredito(factura.cbte_tipo)
 
   const { data: existentes } = await db
     .from("facturas")
     .select("numero, cbte_tipo, punto_venta, tipo")
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const maxNumero = (existentes || [])
     .filter((row: any) => row.tipo === "nota_credito" && Number(row.cbte_tipo) === cbteTipo && Number(row.punto_venta) === puntoVenta)
@@ -143,20 +146,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const pdfStorage = await resolveFacturaPdfPersistence({
-    userId: user.id,
+    userId: tenantId,
     pdfBase64,
     pdfFilename: pdf_filename,
   })
   if (pdfStorage.storage_error) {
     console.warn("[facturas] Nota de crédito guardada con base64 por error en Storage", {
-      userId: user.id,
+      userId: tenantId,
       facturaId: factura.id,
       error: pdfStorage.storage_error,
     })
   }
 
   const insertRow: Record<string, unknown> = {
-    usuario_id: user.id,
+    usuario_id: tenantId,
     tipo: "nota_credito",
     estado: "emitida",
     factura_relacionada_id: factura.id,
@@ -204,7 +207,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .from("facturas")
     .update({ estado: "con_nota_credito", nota_credito_id: notaCredito.id, updated_at: new Date().toISOString() })
     .eq("id", factura.id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
 
   const { pdf_base64: _pdf, ...rest } = notaCredito || {}
   return NextResponse.json({ nota_credito: { ...rest, has_pdf: Boolean(notaCredito?.pdf_base64 || notaCredito?.pdf_storage_path) } })

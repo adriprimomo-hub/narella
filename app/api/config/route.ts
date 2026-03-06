@@ -170,6 +170,52 @@ const getUsuarioConfigRow = async (db: any, userId: string) => {
   return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("id", userId).maybeSingle()
 }
 
+const getTenantUsuarioConfigRow = async (db: any, tenantId: string, actorUserId?: string) => {
+  const owner = await getUsuarioConfigRow(db, tenantId)
+  if (owner.data || owner.error) return owner
+
+  if (actorUserId && actorUserId !== tenantId) {
+    const actor = await getUsuarioConfigRow(db, actorUserId)
+    if (actor.data || actor.error) return actor
+  }
+
+  const scopedFull = await db.from("usuarios").select(USER_CONFIG_SELECT_FULL).eq("tenant_id", tenantId).limit(1).maybeSingle()
+  if (!scopedFull.error) return scopedFull
+  if (!isMissingColumnError(scopedFull.error)) return scopedFull
+
+  const scopedWildcard = await db.from("usuarios").select("*").eq("tenant_id", tenantId).limit(1).maybeSingle()
+  if (!scopedWildcard.error) return scopedWildcard
+  if (!isMissingColumnError(scopedWildcard.error)) return scopedWildcard
+
+  return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("tenant_id", tenantId).limit(1).maybeSingle()
+}
+
+const updateTenantUsuarioConfig = async (
+  db: any,
+  tenantId: string,
+  actorUserId: string,
+  updates: Record<string, unknown>,
+) => {
+  const scoped = await db.from("usuarios").update(updates).eq("tenant_id", tenantId).select("id")
+  if (!scoped.error && Array.isArray(scoped.data) && scoped.data.length > 0) {
+    return { error: null }
+  }
+  if (scoped.error && !isMissingColumnError(scoped.error)) {
+    return { error: scoped.error }
+  }
+
+  const owner = await db.from("usuarios").update(updates).eq("id", tenantId).select("id")
+  if (!owner.error && Array.isArray(owner.data) && owner.data.length > 0) {
+    return { error: null }
+  }
+  if (owner.error && !isMissingColumnError(owner.error)) {
+    return { error: owner.error }
+  }
+
+  const actor = await db.from("usuarios").update(updates).eq("id", actorUserId)
+  return { error: actor.error || null }
+}
+
 const getConfiguracionRow = async (db: any, tenantId: string) => {
   const full = await db.from("configuracion").select(CONFIG_SELECT_FULL).eq("usuario_id", tenantId).maybeSingle()
   if (!full.error) {
@@ -286,7 +332,7 @@ export async function GET() {
   const role = await getUserRole(db, user.id)
   const tenantId = getTenantId(user)
 
-  const { data: usuario, error: userError } = await getUsuarioConfigRow(db, tenantId)
+  const { data: usuario, error: userError } = await getTenantUsuarioConfigRow(db, tenantId, user.id)
   if (userError && !isMissingTableError(userError, "usuarios")) {
     return NextResponse.json({ error: userError.message }, { status: 500 })
   }
@@ -379,7 +425,7 @@ export async function PUT(request: Request) {
     Object.prototype.hasOwnProperty.call(body || {}, column),
   )
 
-  const { data: usuarioActual } = await getUsuarioConfigRow(db, tenantId)
+  const { data: usuarioActual } = await getTenantUsuarioConfigRow(db, tenantId, user.id)
   const allowedUsuarioColumns = new Set(Object.keys(usuarioActual || {}))
   const userUpdatesRaw: Record<string, unknown> = {
     factura_logo_url: normalizeNullableText(factura_logo_url),
@@ -393,7 +439,7 @@ export async function PUT(request: Request) {
 
   const userUpdates: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(userUpdatesRaw)) {
-    if (value !== undefined && allowedUsuarioColumns.has(key)) {
+    if (value !== undefined && (allowedUsuarioColumns.size === 0 || allowedUsuarioColumns.has(key))) {
       userUpdates[key] = value
     }
   }
@@ -401,7 +447,7 @@ export async function PUT(request: Request) {
     if (allowedUsuarioColumns.has("updated_at")) {
       userUpdates.updated_at = new Date()
     }
-    const { error: updateUserError } = await db.from("usuarios").update(userUpdates).eq("id", tenantId)
+    const { error: updateUserError } = await updateTenantUsuarioConfig(db, tenantId, user.id, userUpdates)
     if (updateUserError) return NextResponse.json({ error: updateUserError.message }, { status: 500 })
   }
 
@@ -485,7 +531,7 @@ export async function PUT(request: Request) {
     if (replaceError) return NextResponse.json({ error: replaceError.message }, { status: 500 })
   }
 
-  const { data: usuarioRefrescado } = await getUsuarioConfigRow(db, tenantId)
+  const { data: usuarioRefrescado } = await getTenantUsuarioConfigRow(db, tenantId, user.id)
   const { data: metodos } = await getMetodosPagoRows(db, tenantId)
   const { data: configLocalRefrescada } = await getConfiguracionRow(db, tenantId)
 

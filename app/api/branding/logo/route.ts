@@ -22,6 +22,31 @@ const resolveLogoDataUrl = () => {
   return null
 }
 
+const normalizeLogo = (value: unknown) => {
+  const next = String(value || "").trim()
+  return next || null
+}
+
+const resolveTenantLogo = async (db: any, tenantId: string, actorUserId?: string) => {
+  const owner = await db.from("usuarios").select("factura_logo_url").eq("id", tenantId).maybeSingle()
+  const ownerLogo = normalizeLogo(owner.data?.factura_logo_url)
+  if (ownerLogo) return ownerLogo
+
+  const scoped = await db.from("usuarios").select("factura_logo_url").eq("tenant_id", tenantId).limit(50)
+  if (!scoped.error && Array.isArray(scoped.data)) {
+    const scopedLogo = scoped.data.map((row: any) => normalizeLogo(row?.factura_logo_url)).find(Boolean)
+    if (scopedLogo) return scopedLogo
+  }
+
+  if (actorUserId) {
+    const actor = await db.from("usuarios").select("factura_logo_url").eq("id", actorUserId).maybeSingle()
+    const actorLogo = normalizeLogo(actor.data?.factura_logo_url)
+    if (actorLogo) return actorLogo
+  }
+
+  return null
+}
+
 export const dynamic = "force-dynamic"
 
 export async function GET() {
@@ -33,12 +58,7 @@ export async function GET() {
 
     if (user) {
       const tenantId = getTenantId(user)
-      const { data: tenantUser } = await db
-        .from("usuarios")
-        .select("factura_logo_url")
-        .eq("id", tenantId)
-        .maybeSingle()
-      const tenantLogo = String(tenantUser?.factura_logo_url || "").trim()
+      const tenantLogo = await resolveTenantLogo(db, tenantId, user.id)
       if (tenantLogo) {
         return NextResponse.json({ data_url: tenantLogo }, { headers: { "Cache-Control": "no-store" } })
       }

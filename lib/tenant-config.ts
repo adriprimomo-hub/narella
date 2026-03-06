@@ -93,17 +93,29 @@ const isMissingTableError = (error: any, table: string) => {
   return message.includes(`public.${table}`.toLowerCase()) && message.includes("schema cache")
 }
 
+const getTenantFacturacionScopedRow = async (db: any, tenantId: string, selectExpr: string) => {
+  const byId = await db.from("usuarios").select(selectExpr).eq("id", tenantId).maybeSingle()
+  if (!byId.error && byId.data) return byId
+  if (byId.error && !isMissingColumnError(byId.error)) return byId
+
+  const byTenant = await db.from("usuarios").select(selectExpr).eq("tenant_id", tenantId).limit(1).maybeSingle()
+  if (!byTenant.error) return byTenant
+  if (!isMissingColumnError(byTenant.error)) return byTenant
+
+  return byId.error ? byId : byTenant
+}
+
 const getTenantFacturacionRow = async (db: any, tenantId: string) => {
-  const full = await db.from("usuarios").select(USER_FACTURACION_SELECT_FULL).eq("id", tenantId).maybeSingle()
+  const full = await getTenantFacturacionScopedRow(db, tenantId, USER_FACTURACION_SELECT_FULL)
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
 
-  const fallback = await db.from("usuarios").select(USER_FACTURACION_SELECT_FALLBACK).eq("id", tenantId).maybeSingle()
+  const fallback = await getTenantFacturacionScopedRow(db, tenantId, USER_FACTURACION_SELECT_FALLBACK)
   if (!fallback.error) return fallback
   if (!isMissingColumnError(fallback.error)) return fallback
 
   // Esquemas legacy: pedir todas las columnas evita romper por columnas nuevas faltantes.
-  return db.from("usuarios").select("*").eq("id", tenantId).maybeSingle()
+  return getTenantFacturacionScopedRow(db, tenantId, "*")
 }
 
 const getTenantConfigRow = async (db: any, tenantId: string) => {
