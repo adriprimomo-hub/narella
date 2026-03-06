@@ -15,6 +15,8 @@ import {
 import { distribuirCobroProductos, splitCobroServicioProductos } from "@/lib/pagos/caja"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { decrementProductoStock, incrementProductoStock } from "@/lib/stock-atomic"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type ProductoPayload = {
   producto_id: string
@@ -77,6 +79,9 @@ const pagoGrupoSchema = z
   })
   .passthrough()
 
+const PAGOS_GRUPO_WINDOW_MS = 60 * 1000
+const PAGOS_GRUPO_MAX_REQUESTS = 20
+
 export async function POST(request: Request) {
   const db = await createClient()
   const {
@@ -88,6 +93,19 @@ export async function POST(request: Request) {
   const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
+
+  const clientId = getClientId(request)
+  const limitKey = `pagos-grupo:${tenantId}:${user.id}:${clientId}`
+  const limit = await rateLimit({ key: limitKey, max: PAGOS_GRUPO_MAX_REQUESTS, windowMs: PAGOS_GRUPO_WINDOW_MS })
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas solicitudes de cobro grupal. Intenta nuevamente en unos segundos." },
+      {
+        status: 429,
+        headers: limit.retryAfter ? { "Retry-After": String(limit.retryAfter) } : undefined,
+      },
+    )
+  }
 
   const { data: payload, response: validationResponse } = await validateBody(request, pagoGrupoSchema)
   if (validationResponse) return validationResponse
@@ -428,7 +446,7 @@ export async function POST(request: Request) {
 
   // Actualizar turnos del grupo
   for (const turno of turnosGrupo) {
-    const { error: turnoUpdateError } = await db
+    const { data: updatedTurnos, error: turnoUpdateError } = await db
       .from("turnos")
       .update({
         estado: "completado",
@@ -440,14 +458,29 @@ export async function POST(request: Request) {
       })
       .eq("usuario_id", tenantId)
       .eq("id", turno.id)
+      .in("estado", ["pendiente", "en_curso"])
+      .select("id")
     if (turnoUpdateError) {
       return NextResponse.json({ error: turnoUpdateError.message }, { status: 500 })
+    }
+    if (!Array.isArray(updatedTurnos) || updatedTurnos.length === 0) {
+      return NextResponse.json({ error: "Uno de los turnos del grupo ya fue cerrado por otro usuario." }, { status: 409 })
     }
   }
 
   // Procesar productos vendidos (a nivel grupo)
   for (const detalle of productosDetalles) {
     const { producto, cantidad, precioUnitario, subtotal, empleada_id, nota } = detalle
+
+    const stockResult = await decrementProductoStock({
+      db,
+      tenantId,
+      productoId: producto.id,
+      cantidad,
+    })
+    if (!stockResult.ok) {
+      return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
+    }
 
     const { error: productoMovimientoError } = await db.from("producto_movimientos").insert([
       {
@@ -465,17 +498,13 @@ export async function POST(request: Request) {
       },
     ])
     if (productoMovimientoError) {
+      await incrementProductoStock({
+        db,
+        tenantId,
+        productoId: producto.id,
+        cantidad,
+      })
       return NextResponse.json({ error: productoMovimientoError.message }, { status: 500 })
-    }
-
-    const nuevoStock = Math.max(0, Number(producto.stock_actual || 0) - cantidad)
-    const { error: stockUpdateError } = await db
-      .from("productos")
-      .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
-      .eq("id", producto.id)
-      .eq("usuario_id", tenantId)
-    if (stockUpdateError) {
-      return NextResponse.json({ error: stockUpdateError.message }, { status: 500 })
     }
   }
 

@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { decrementProductoStock, incrementProductoStock } from "@/lib/stock-atomic"
 
 const compraSchema = z.object({
   producto_id: z.string().min(1),
@@ -26,6 +27,14 @@ export async function POST(request: Request) {
   if (validationResponse) return validationResponse
   const { producto_id, cantidad, costo_unitario, nota } = payload
 
+  const stockResult = await incrementProductoStock({
+    db,
+    tenantId: user.id,
+    productoId: producto_id,
+    cantidad,
+  })
+  if (!stockResult.ok) return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
+
   const { data, error } = await db
     .from("producto_compras")
     .insert([
@@ -42,17 +51,16 @@ export async function POST(request: Request) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    await decrementProductoStock({
+      db,
+      tenantId: user.id,
+      productoId: producto_id,
+      cantidad,
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
-  // Ajustar stock del producto
-  const { data: current } = await db
-    .from("productos")
-    .select("stock_actual")
-    .eq("id", producto_id)
-    .eq("usuario_id", user.id)
-    .single()
-  const nuevoStock = Number(current?.stock_actual || 0) + Number(cantidad)
-  await db.from("productos").update({ stock_actual: nuevoStock }).eq("id", producto_id).eq("usuario_id", user.id)
   return NextResponse.json(data)
 }
 

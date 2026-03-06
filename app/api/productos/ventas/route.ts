@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { decrementProductoStock, incrementProductoStock } from "@/lib/stock-atomic"
 
 const ventaSchema = z.object({
   producto_id: z.string().min(1),
@@ -57,19 +58,20 @@ export async function POST(request: Request) {
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Ajustar stock
-  const { data: current } = await db
-    .from("productos")
-    .select("stock_actual")
-    .eq("id", producto_id)
-    .eq("usuario_id", user.id)
-    .single()
-  const nuevoStock = Number(current?.stock_actual || 0) - Number(cantidad)
-  await db.from("productos").update({ stock_actual: nuevoStock }).eq("id", producto_id).eq("usuario_id", user.id)
+  const stockResult = await decrementProductoStock({
+    db,
+    tenantId: user.id,
+    productoId: producto_id,
+    cantidad,
+  })
+  if (!stockResult.ok) {
+    await db.from("producto_movimientos").delete().eq("id", data.id).eq("usuario_id", user.id)
+    return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
+  }
 
   // Registrar en caja
   const monto = Number(cantidad) * Number(finalPrecioUnitario)
-  await db.from("caja_movimientos").insert([
+  const { error: cajaError } = await db.from("caja_movimientos").insert([
     {
       usuario_id: user.id,
       creado_por_username: username,
@@ -82,6 +84,11 @@ export async function POST(request: Request) {
       creado_por: user.id,
     },
   ])
+  if (cajaError) {
+    await db.from("producto_movimientos").delete().eq("id", data.id).eq("usuario_id", user.id)
+    await incrementProductoStock({ db, tenantId: user.id, productoId: producto_id, cantidad })
+    return NextResponse.json({ error: cajaError.message }, { status: 500 })
+  }
 
   return NextResponse.json(data)
 }

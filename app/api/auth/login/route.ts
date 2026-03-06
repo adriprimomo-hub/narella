@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const clientId = getClientId(request)
   const limitKey = `login:${clientId}:${username}`
-  const limit = rateLimit({ key: limitKey, max: LOGIN_MAX_ATTEMPTS, windowMs: LOGIN_WINDOW_MS })
+  const limit = await rateLimit({ key: limitKey, max: LOGIN_MAX_ATTEMPTS, windowMs: LOGIN_WINDOW_MS })
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Demasiados intentos. Intenta nuevamente mas tarde." },
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     }
   }
 
-  clearRateLimit(limitKey)
+  await clearRateLimit(limitKey)
 
   const response = NextResponse.json({
     success: true,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
+import { applyInsumoStockDelta } from "@/lib/stock-atomic"
 
 const movimientoSchema = z.object({
   insumo_id: z.string().min(1),
@@ -94,25 +95,18 @@ export async function POST(request: Request) {
           ? -1
           : 0
 
-    let nuevoStock: number | null = null
+    let stockDeltaAplicado = 0
     if (signo !== 0) {
-      const { data: current, error: stockError } = await db
-        .from("insumos")
-        .select("stock_actual")
-        .eq("id", insumo_id)
-        .eq("usuario_id", user.id)
-        .single()
-
-      if (stockError) {
-        const message = stockError.message || "Insumo no encontrado"
-        const status = message.toLowerCase().includes("no rows") ? 404 : 500
-        return NextResponse.json({ error: message }, { status })
+      const stockResult = await applyInsumoStockDelta({
+        db,
+        tenantId: user.id,
+        insumoId: insumo_id,
+        delta: signo * cantidadNumber,
+      })
+      if (!stockResult.ok) {
+        return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
       }
-
-      nuevoStock = Number(current?.stock_actual || 0) + signo * cantidadNumber
-      if (nuevoStock < 0) {
-        return NextResponse.json({ error: "Stock insuficiente para registrar este movimiento" }, { status: 400 })
-      }
+      stockDeltaAplicado = signo * cantidadNumber
     }
 
     const { data: mov, error } = await db
@@ -133,19 +127,17 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
+      if (stockDeltaAplicado !== 0) {
+        await applyInsumoStockDelta({
+          db,
+          tenantId: user.id,
+          insumoId: insumo_id,
+          delta: -stockDeltaAplicado,
+        })
+      }
       const message = error.message || "Error al registrar el movimiento"
       const status = message.toLowerCase().includes("row-level security") ? 403 : 500
       return NextResponse.json({ error: message }, { status })
-    }
-
-    if (signo !== 0 && nuevoStock !== null) {
-      const { error: updateError } = await db
-        .from("insumos")
-        .update({ stock_actual: nuevoStock })
-        .eq("id", insumo_id)
-        .eq("usuario_id", user.id)
-
-      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
 
     return NextResponse.json(mov)

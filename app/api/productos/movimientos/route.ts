@@ -15,6 +15,7 @@ import {
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
+import { decrementProductoStock, incrementProductoStock } from "@/lib/stock-atomic"
 
 const productoMovimientoSchema = z.object({
   producto_id: z.string().min(1),
@@ -142,6 +143,29 @@ export async function POST(request: Request) {
     productoNombre = producto?.nombre || ""
   }
 
+  const signo = tipo === "compra" || tipo === "ajuste_positivo" ? 1 : tipo === "venta" || tipo === "ajuste_negativo" ? -1 : 0
+
+  if (signo !== 0) {
+    const stockResult =
+      signo > 0
+        ? await incrementProductoStock({
+            db,
+            tenantId,
+            productoId: producto_id,
+            cantidad,
+          })
+        : await decrementProductoStock({
+            db,
+            tenantId,
+            productoId: producto_id,
+            cantidad,
+          })
+
+    if (!stockResult.ok) {
+      return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
+    }
+  }
+
   const { data: mov, error } = await db
     .from("producto_movimientos")
     .insert([
@@ -163,19 +187,15 @@ export async function POST(request: Request) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const signo = tipo === "compra" || tipo === "ajuste_positivo" ? 1 : tipo === "venta" || tipo === "ajuste_negativo" ? -1 : 0
-
-  if (signo !== 0) {
-    const { data: current } = await db
-      .from("productos")
-      .select("stock_actual")
-      .eq("id", producto_id)
-      .eq("usuario_id", tenantId)
-      .single()
-    const nuevoStock = Number(current?.stock_actual || 0) + signo * Number(cantidad)
-    await db.from("productos").update({ stock_actual: nuevoStock }).eq("id", producto_id).eq("usuario_id", tenantId)
+  if (error) {
+    if (signo !== 0) {
+      if (signo > 0) {
+        await decrementProductoStock({ db, tenantId, productoId: producto_id, cantidad })
+      } else {
+        await incrementProductoStock({ db, tenantId, productoId: producto_id, cantidad })
+      }
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   let facturaResponse = null

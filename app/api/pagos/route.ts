@@ -15,6 +15,8 @@ import {
 import { distribuirCobroProductos, splitCobroServicioProductos } from "@/lib/pagos/caja"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { decrementProductoStock, incrementProductoStock } from "@/lib/stock-atomic"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type ProductoPayload = {
   producto_id: string
@@ -92,6 +94,9 @@ const pagoSchema = z
   })
   .passthrough()
 
+const PAGOS_WINDOW_MS = 60 * 1000
+const PAGOS_MAX_REQUESTS = 20
+
 export async function GET(request: Request) {
   const db = await createClient()
   const {
@@ -133,6 +138,19 @@ export async function POST(request: Request) {
   const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
   const isAdmin = isAdminRole(role)
+
+  const clientId = getClientId(request)
+  const limitKey = `pagos:${tenantId}:${user.id}:${clientId}`
+  const limit = await rateLimit({ key: limitKey, max: PAGOS_MAX_REQUESTS, windowMs: PAGOS_WINDOW_MS })
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas solicitudes de cobro. Intenta nuevamente en unos segundos." },
+      {
+        status: 429,
+        headers: limit.retryAfter ? { "Retry-After": String(limit.retryAfter) } : undefined,
+      },
+    )
+  }
 
   const { data: payload, response: validationResponse } = await validateBody(request, pagoSchema)
   if (validationResponse) return validationResponse
@@ -442,7 +460,7 @@ export async function POST(request: Request) {
   const montoParaPago = giftcardMontoAplicado > 0 ? montoTotal : montoCobrado
 
   // Actualizar turno (estado, tiempos reales, penalidad, cambios)
-  const { error: turnoUpdateError } = await db
+  const { data: updatedTurnos, error: turnoUpdateError } = await db
     .from("turnos")
     .update({
       estado: "completado",
@@ -469,8 +487,13 @@ export async function POST(request: Request) {
     })
     .eq("usuario_id", tenantId)
     .eq("id", turnoId)
+    .in("estado", ["pendiente", "en_curso"])
+    .select("id")
   if (turnoUpdateError) {
     return NextResponse.json({ error: turnoUpdateError.message }, { status: 500 })
+  }
+  if (!Array.isArray(updatedTurnos) || updatedTurnos.length === 0) {
+    return NextResponse.json({ error: "El turno ya fue cerrado por otro usuario." }, { status: 409 })
   }
 
   const { data, error } = await db
@@ -556,6 +579,16 @@ export async function POST(request: Request) {
     const empleadaComisionStaff = productoComisionaStaff ? staffOrigenId : null
     const notaProducto = buildProductoNota(`Venta en turno ${turnoId}`, productoComisionaStaff, empleadaComisionStaff)
 
+    const stockResult = await decrementProductoStock({
+      db,
+      tenantId,
+      productoId: prod.producto_id,
+      cantidad,
+    })
+    if (!stockResult.ok) {
+      return NextResponse.json({ error: stockResult.error }, { status: stockResult.status })
+    }
+
     // Registrar movimiento de stock
     const { error: movimientoProductoError } = await db.from("producto_movimientos").insert([
       {
@@ -573,18 +606,13 @@ export async function POST(request: Request) {
       },
     ])
     if (movimientoProductoError) {
+      await incrementProductoStock({
+        db,
+        tenantId,
+        productoId: prod.producto_id,
+        cantidad,
+      })
       return NextResponse.json({ error: movimientoProductoError.message }, { status: 500 })
-    }
-
-    // Actualizar stock
-    const nuevoStock = Math.max(0, Number(producto.stock_actual || 0) - cantidad)
-    const { error: stockUpdateError } = await db
-      .from("productos")
-      .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
-      .eq("id", prod.producto_id)
-      .eq("usuario_id", tenantId)
-    if (stockUpdateError) {
-      return NextResponse.json({ error: stockUpdateError.message }, { status: 500 })
     }
   }
 

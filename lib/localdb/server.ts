@@ -5,6 +5,7 @@ import { createLocalClient } from "./query"
 import { getTenantId, LOCALDB_SESSION_COOKIE } from "./session"
 import { parseSessionToken } from "./session-token"
 import { createSupabaseAdminClient, isSupabaseConfigured } from "@/lib/supabase/server"
+import { findUserById } from "./store"
 
 type TenantContext = {
   tenantId: string | null
@@ -12,6 +13,14 @@ type TenantContext = {
 }
 
 const ALLOW_LOCALDB_IN_PRODUCTION = process.env.ALLOW_LOCALDB_IN_PRODUCTION === "true"
+
+const isSessionInvalidated = (sessionIssuedAt: number | null | undefined, invalidBeforeRaw: unknown) => {
+  if (!sessionIssuedAt || !invalidBeforeRaw) return false
+  const invalidBeforeMs = new Date(String(invalidBeforeRaw)).getTime()
+  if (!Number.isFinite(invalidBeforeMs)) return false
+  const invalidBeforeSec = Math.floor(invalidBeforeMs / 1000)
+  return sessionIssuedAt <= invalidBeforeSec
+}
 
 const applyTenantId = (payload: any, tenantId: string | null) => {
   if (!tenantId) return payload
@@ -145,11 +154,18 @@ class TenantQuery {
 export async function createClient() {
   const cookieStore = await cookies()
   const rawSession = cookieStore.get(LOCALDB_SESSION_COOKIE)?.value ?? null
-  const sessionId = parseSessionToken(rawSession)
+  const session = parseSessionToken(rawSession)
+  const sessionId = session?.userId ?? null
 
   if (!isSupabaseConfigured()) {
     if (process.env.NODE_ENV === "production" && !ALLOW_LOCALDB_IN_PRODUCTION) {
       throw new Error("Supabase no configurado. Definí SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.")
+    }
+    if (session?.userId) {
+      const localUser = findUserById(session.userId)
+      if (isSessionInvalidated(session.issuedAt, localUser?.session_invalid_before)) {
+        return createLocalClient(null)
+      }
     }
     return createLocalClient(sessionId)
   }
@@ -161,16 +177,20 @@ export async function createClient() {
   if (sessionId) {
     const { data, error } = await supabase.from("usuarios").select("*").eq("id", sessionId).maybeSingle()
     if (!error && data) {
-      user = data
-      const tenantId = getTenantId(user)
-      if (tenantId) {
-        const tenantUserIds = new Set<string>([tenantId])
-        if (user.id) tenantUserIds.add(String(user.id))
-        const { data: tenantRows } = await supabase.from("usuarios").select("id").eq("tenant_id", tenantId)
-        ;(tenantRows || []).forEach((row: any) => {
-          if (row?.id) tenantUserIds.add(String(row.id))
-        })
-        tenantContext = { tenantId, tenantUserIds: Array.from(tenantUserIds) }
+      const isInvalidated = isSessionInvalidated(session?.issuedAt, data?.session_invalid_before)
+
+      if (!isInvalidated) {
+        user = data
+        const tenantId = getTenantId(user)
+        if (tenantId) {
+          const tenantUserIds = new Set<string>([tenantId])
+          if (user.id) tenantUserIds.add(String(user.id))
+          const { data: tenantRows } = await supabase.from("usuarios").select("id").eq("tenant_id", tenantId)
+          ;(tenantRows || []).forEach((row: any) => {
+            if (row?.id) tenantUserIds.add(String(row.id))
+          })
+          tenantContext = { tenantId, tenantUserIds: Array.from(tenantUserIds) }
+        }
       }
     }
   }
