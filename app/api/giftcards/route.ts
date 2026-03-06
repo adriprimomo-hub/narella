@@ -59,7 +59,20 @@ const isVigente = (row: any, now: Date) => {
 
 const sanitizeGiftcardRow = (row: any) => {
   const { imagen_base64: _img, ...rest } = row || {}
-  return rest
+  const userId = typeof row?.creado_por === "string" && row.creado_por.trim() ? row.creado_por.trim() : null
+  const username =
+    typeof row?.creado_por_username === "string" && row.creado_por_username.trim()
+      ? row.creado_por_username.trim()
+      : null
+  return {
+    ...rest,
+    creado_por: userId,
+    creado_por_username: username,
+    por: {
+      user_id: userId,
+      username,
+    },
+  }
 }
 
 export async function GET(request: Request) {
@@ -121,10 +134,17 @@ export async function GET(request: Request) {
       const cliente = `${row.clientes?.nombre || ""} ${row.clientes?.apellido || ""}`.toLowerCase()
       const numero = `${row.numero || ""}`.toLowerCase()
       const deParte = `${row.de_parte_de || ""}`.toLowerCase()
+      const actor = `${row.creado_por_username || ""}`.toLowerCase()
       const servicios = Array.isArray(row.servicios)
         ? row.servicios.map((s: any) => s?.nombre || "").join(" ").toLowerCase()
         : ""
-      return cliente.includes(term) || numero.includes(term) || deParte.includes(term) || servicios.includes(term)
+      return (
+        cliente.includes(term) ||
+        numero.includes(term) ||
+        deParte.includes(term) ||
+        servicios.includes(term) ||
+        actor.includes(term)
+      )
     })
   }
 

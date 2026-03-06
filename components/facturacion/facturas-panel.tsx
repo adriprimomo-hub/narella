@@ -14,6 +14,7 @@ import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factur
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/date-format"
 import { FileMinusIcon, FileTextIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
+import { UserBadge } from "@/components/ui/user-badge"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const SEARCH_LIMIT = 50
@@ -51,6 +52,8 @@ type FacturaRow = {
   pdf_filename?: string | null
   factura_relacionada_id?: string | null
   nota_credito_id?: string | null
+  creado_por?: string | null
+  creado_por_username?: string | null
   created_at?: string | null
 }
 
@@ -441,6 +444,7 @@ export function FacturasPanel() {
                   <TableHead>Tipo</TableHead>
                   <TableHead>CAE</TableHead>
                   <TableHead>Método</TableHead>
+                  <TableHead>Por</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -449,13 +453,13 @@ export function FacturasPanel() {
               <TableBody>
                 {(esperandoFacturas && canSearch) || isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={10} className="text-sm text-muted-foreground">
                       {canSearch ? "Buscando facturas..." : "Cargando facturas..."}
                     </TableCell>
                   </TableRow>
                 ) : facturasFiltradas.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={10} className="text-sm text-muted-foreground">
                       {emptyMessage}
                     </TableCell>
                   </TableRow>
@@ -476,6 +480,9 @@ export function FacturasPanel() {
                           {row.cae_vto && <div className="text-[11px]">Vto: {row.cae_vto}</div>}
                         </TableCell>
                         <TableCell className="text-xs capitalize">{row.metodo_pago || "-"}</TableCell>
+                        <TableCell>
+                          <UserBadge username={row.creado_por_username} userId={row.creado_por} />
+                        </TableCell>
                         <TableCell
                           className={cn(
                             "text-right font-semibold",

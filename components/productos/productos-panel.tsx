@@ -114,6 +114,7 @@ export function ProductosPanel() {
   const role = normalizeRole(config?.rol)
   const isAdmin = role === "admin"
   const isRecepcion = role === "recepcion"
+  const canManageAllMovimientos = isAdmin || isRecepcion
   const canCreateProducto = isAdmin || isRecepcion
   const metodosPagoList = useMemo(() => {
     if (Array.isArray(config?.metodos_pago_config) && config.metodos_pago_config.length > 0) {
@@ -235,10 +236,10 @@ export function ProductosPanel() {
   }, [selectedProducto])
 
   useEffect(() => {
-    if (!isAdmin && mov.tipo !== "venta") {
+    if (!canManageAllMovimientos && mov.tipo !== "venta") {
       setMov((prev) => ({ ...prev, tipo: "venta" }))
     }
-  }, [isAdmin, mov.tipo])
+  }, [canManageAllMovimientos, mov.tipo])
 
   useEffect(() => {
     if (mov.tipo !== "venta") {
@@ -460,7 +461,7 @@ export function ProductosPanel() {
   }
 
   const handleTipoChange = (nuevoTipo: Movimiento["tipo"]) => {
-    if (!isAdmin) return
+    if (!canManageAllMovimientos) return
     setMov((prev) => ({
       ...prev,
       tipo: nuevoTipo,
@@ -945,16 +946,16 @@ export function ProductosPanel() {
               <Select
                 value={mov.tipo}
                 onValueChange={(value) => handleTipoChange(value as Movimiento["tipo"])}
-                disabled={!isAdmin}
+                disabled={!canManageAllMovimientos}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecciona el tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {isAdmin && <SelectItem value="compra">Compra</SelectItem>}
+                  {canManageAllMovimientos && <SelectItem value="compra">Compra</SelectItem>}
                   <SelectItem value="venta">Venta</SelectItem>
-                  {isAdmin && <SelectItem value="ajuste_positivo">Ajuste positivo</SelectItem>}
-                  {isAdmin && <SelectItem value="ajuste_negativo">Ajuste negativo</SelectItem>}
+                  {canManageAllMovimientos && <SelectItem value="ajuste_positivo">Ajuste positivo</SelectItem>}
+                  {canManageAllMovimientos && <SelectItem value="ajuste_negativo">Ajuste negativo</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
@@ -988,7 +989,7 @@ export function ProductosPanel() {
                       if (movErrors.precio) setMovErrors((prev) => ({ ...prev, precio: undefined }))
                     }
                   }}
-                  disabled={!isAdmin}
+                  disabled={!canManageAllMovimientos}
                 />
                 {mov.tipo === "compra" && movErrors.costo && (
                   <p className="text-xs text-destructive">{movErrors.costo}</p>

@@ -40,6 +40,23 @@ const isMissingColumnError = (error: any, column: string) => {
   return message.includes("schema cache") && message.includes(col)
 }
 
+const normalizeActor = (row: any) => {
+  const userId = typeof row?.creado_por === "string" && row.creado_por.trim() ? row.creado_por.trim() : null
+  const username =
+    typeof row?.creado_por_username === "string" && row.creado_por_username.trim()
+      ? row.creado_por_username.trim()
+      : null
+
+  return {
+    creado_por: userId,
+    creado_por_username: username,
+    por: {
+      user_id: userId,
+      username,
+    },
+  }
+}
+
 export async function GET(request: Request) {
   const db = await createClient()
   const {
@@ -106,6 +123,7 @@ export async function GET(request: Request) {
       const metodo = `${row.metodo_pago || ""}`.toLowerCase()
       const estadoRow = `${row.estado || ""}`.toLowerCase()
       const tipoRow = `${row.tipo || ""}`.toLowerCase()
+      const actor = `${row.creado_por_username || ""}`.toLowerCase()
       return (
         cliente.includes(term) ||
         numero.includes(term) ||
@@ -113,7 +131,8 @@ export async function GET(request: Request) {
         cae.includes(term) ||
         metodo.includes(term) ||
         estadoRow.includes(term) ||
-        tipoRow.includes(term)
+        tipoRow.includes(term) ||
+        actor.includes(term)
       )
     })
   }
@@ -129,7 +148,11 @@ export async function GET(request: Request) {
 
   const sanitized = results.map((row: any) => {
     const { pdf_base64: _pdf, ...rest } = row || {}
-    return { ...rest, has_pdf: Boolean(row?.pdf_base64 || row?.pdf_storage_path) }
+    return {
+      ...rest,
+      ...normalizeActor(row),
+      has_pdf: Boolean(row?.pdf_base64 || row?.pdf_storage_path),
+    }
   })
 
   return NextResponse.json(sanitized)

@@ -92,7 +92,7 @@ export async function POST(request: Request) {
   const username = user.username || (user.user_metadata as any)?.username || user.id
   const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
-  const isAdmin = isAdminRole(role)
+  const canManageAllMovements = isAdminRole(role) || role === "recepcion"
 
   const { data: payload, response: validationResponse } = await validateBody(request, productoMovimientoSchema)
   if (validationResponse) return validationResponse
@@ -110,14 +110,14 @@ export async function POST(request: Request) {
   } = payload
   if (!producto_id || !tipo || !cantidad) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
 
-  if (!isAdmin && tipo === "compra") {
+  if (!canManageAllMovements && tipo === "compra") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   let safeCosto = costo_unitario || null
   let safePrecio = precio_unitario || null
   let productoNombre = ""
-  if (!isAdmin) {
+  if (!canManageAllMovements) {
     if (tipo === "venta") {
       const { data: producto } = await db
         .from("productos")

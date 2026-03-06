@@ -16,6 +16,7 @@ import { GiftcardPreviewDialog } from "./giftcard-preview-dialog"
 import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factura-dialog"
 import { formatDate } from "@/lib/date-format"
 import { showSystemConfirm } from "@/lib/system-dialogs"
+import { UserBadge } from "@/components/ui/user-badge"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const GIFTCARDS_PAGE_SIZE = 60
@@ -28,6 +29,8 @@ type GiftcardRow = GiftcardData & {
   vigente?: boolean
   usada_en?: string | null
   estado?: string | null
+  creado_por?: string | null
+  creado_por_username?: string | null
 }
 
 type GiftcardsPageResponse = {
@@ -251,13 +254,14 @@ export function GiftcardsPanel() {
                   <TableHead>Validez</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Por</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="text-sm text-muted-foreground">
                       Sin giftcards registradas.
                     </TableCell>
                   </TableRow>
@@ -287,6 +291,9 @@ export function GiftcardsPanel() {
                         <TableCell className="text-right">${Number(g.monto_total || 0).toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge variant={getEstadoVariant(g)}>{getEstadoLabel(g)}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <UserBadge username={g.creado_por_username} userId={g.creado_por} />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap justify-end gap-2">
