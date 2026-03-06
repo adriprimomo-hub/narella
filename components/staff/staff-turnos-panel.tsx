@@ -282,7 +282,7 @@ export function StaffTurnosPanel() {
                     </div>
                   )}
                   <Button onClick={() => startEditing(turno)} className="mt-2">
-                    Modificar
+                    Ver
                   </Button>
                 </div>
               ) : (
