@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, isStaffRole, normalizeRole } from "@/lib/roles"
 import { isSupabaseConfigured } from "@/lib/supabase/server"
+import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -217,20 +218,21 @@ const updateTenantUsuarioConfig = async (
 }
 
 const getConfiguracionRow = async (db: any, tenantId: string) => {
-  const full = await db.from("configuracion").select(CONFIG_SELECT_FULL).eq("usuario_id", tenantId).maybeSingle()
+  const full = await selectTenantConfiguracionRow(db, tenantId, CONFIG_SELECT_FULL)
   if (!full.error) {
-    return { data: full.data, error: full.error, supportsExtendedColumns: true }
+    return { data: full.data, error: null, supportsExtendedColumns: true }
   }
   if (!isMissingColumnError(full.error)) {
     return { data: full.data, error: full.error, supportsExtendedColumns: true }
   }
 
-  const wildcard = await db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
+  const wildcard = await selectTenantConfiguracionRow(db, tenantId, "*")
   if (!wildcard.error) {
     return {
       data: wildcard.data,
-      error: wildcard.error,
-      supportsExtendedColumns: !wildcard.data || hasAnyConfigExtendedColumn(wildcard.data),
+      error: null,
+      supportsExtendedColumns:
+        wildcard.rows.length === 0 || hasAnyConfigExtendedColumn(wildcard.data),
     }
   }
   if (!isMissingColumnError(wildcard.error)) {
@@ -241,7 +243,7 @@ const getConfiguracionRow = async (db: any, tenantId: string) => {
     }
   }
 
-  const fallback = await db.from("configuracion").select(CONFIG_SELECT_FALLBACK).eq("usuario_id", tenantId).maybeSingle()
+  const fallback = await selectTenantConfiguracionRow(db, tenantId, CONFIG_SELECT_FALLBACK)
   return {
     data: fallback.data,
     error: fallback.error,
@@ -498,6 +500,7 @@ export async function PUT(request: Request) {
     if (configLocalActual?.id) {
       const updatePayload = { ...configPayload } as Record<string, unknown>
       if (allowedConfigColumns.has("updated_at")) updatePayload.updated_at = new Date()
+      updatePayload.usuario_id = tenantId
       const { error: updateError } = await db.from("configuracion").update(updatePayload).eq("id", configLocalActual.id)
       if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
     } else {
@@ -508,6 +511,15 @@ export async function PUT(request: Request) {
       const { error: insertError } = await db.from("configuracion").insert([insertPayload])
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
+  }
+
+  const { error: cleanupConfigError } = await db
+    .from("configuracion")
+    .delete()
+    .eq("usuario_id", tenantId)
+    .neq("usuario_id", tenantId)
+  if (cleanupConfigError && !isMissingTableError(cleanupConfigError, "configuracion")) {
+    return NextResponse.json({ error: cleanupConfigError.message }, { status: 500 })
   }
 
   if (Array.isArray(metodosPayload)) {

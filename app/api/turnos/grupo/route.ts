@@ -2,6 +2,7 @@ import { createClient } from "@/lib/localdb/server"
 import { getTenantId } from "@/lib/localdb/session"
 import { NextResponse } from "next/server"
 import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -126,7 +127,11 @@ export async function POST(request: Request) {
     })
   }
 
-  const { data: configLocal } = await db.from("configuracion").select("horario_local").eq("usuario_id", tenantId).maybeSingle()
+  const { data: configLocal } = await selectTenantConfiguracionRow(
+    db,
+    tenantId,
+    "id, usuario_id, horario_local, updated_at, created_at",
+  )
 
   for (const item of items) {
     const servicio = serviciosMap.get(item.servicio_id)

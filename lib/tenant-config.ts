@@ -1,4 +1,5 @@
 import { resolveFacturacionConfig, type FacturacionConfig } from "@/lib/facturacion"
+import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 
 export type TenantMensajeriaTemplates = {
   confirmaciones: string
@@ -119,20 +120,16 @@ const getTenantFacturacionRow = async (db: any, tenantId: string) => {
 }
 
 const getTenantConfigRow = async (db: any, tenantId: string) => {
-  const full = await db.from("configuracion").select(CONFIG_MENSAJERIA_SELECT).eq("usuario_id", tenantId).maybeSingle()
+  const full = await selectTenantConfiguracionRow(db, tenantId, CONFIG_MENSAJERIA_SELECT)
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
 
-  const fallback = await db
-    .from("configuracion")
-    .select("giftcard_template_data_url")
-    .eq("usuario_id", tenantId)
-    .maybeSingle()
+  const fallback = await selectTenantConfiguracionRow(db, tenantId, "giftcard_template_data_url")
   if (!fallback.error) return fallback
   if (!isMissingColumnError(fallback.error)) return fallback
 
   // Fallback universal para instalaciones antiguas con columnas personalizadas parciales.
-  return db.from("configuracion").select("*").eq("usuario_id", tenantId).maybeSingle()
+  return selectTenantConfiguracionRow(db, tenantId, "*")
 }
 
 export const resolveTenantMensajeriaTemplates = async (

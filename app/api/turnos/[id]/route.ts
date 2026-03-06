@@ -14,6 +14,7 @@ import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/l
 import { resolveAppUrl } from "@/lib/url"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
 import { renderMessageTemplate, resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
+import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -732,7 +733,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "El turno esta fuera del horario laboral configurado" }, { status: 409 })
   }
 
-  const { data: configLocal } = await db.from("configuracion").select("horario_local").eq("usuario_id", tenantId).maybeSingle()
+  const { data: configLocal } = await selectTenantConfiguracionRow(
+    db,
+    tenantId,
+    "id, usuario_id, horario_local, updated_at, created_at",
+  )
   if (!estaDentroDeHorario((configLocal as any)?.horario_local || [], fechaInicioDate, updatedDuracion)) {
     return NextResponse.json({ error: "El turno esta fuera del horario del local" }, { status: 409 })
   }

@@ -5,6 +5,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, isStaffRole } from "@/lib/roles"
 import { getEmpleadaIdForUser } from "@/lib/permissions"
 import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 
@@ -198,7 +199,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "El turno esta fuera del horario laboral configurado" }, { status: 409 })
   }
 
-  const { data: configLocal } = await db.from("configuracion").select("horario_local").eq("usuario_id", tenantId).maybeSingle()
+  const { data: configLocal } = await selectTenantConfiguracionRow(
+    db,
+    tenantId,
+    "id, usuario_id, horario_local, updated_at, created_at",
+  )
   if (!estaDentroDeHorario((configLocal as any)?.horario_local || [], fechaInicioDate, duracion)) {
     return NextResponse.json({ error: "El turno esta fuera del horario del local" }, { status: 409 })
   }
