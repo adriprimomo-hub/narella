@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
-import { createClient } from "@/lib/localdb/server"
-import { getTenantId } from "@/lib/localdb/session"
 
 const resolveLogoDataUrl = () => {
   const inline = process.env.FACTURA_LOGO_DATA
@@ -22,51 +20,9 @@ const resolveLogoDataUrl = () => {
   return null
 }
 
-const normalizeLogo = (value: unknown) => {
-  const next = String(value || "").trim()
-  return next || null
-}
-
-const resolveTenantLogo = async (db: any, tenantId: string, actorUserId?: string) => {
-  const owner = await db.from("usuarios").select("factura_logo_url").eq("id", tenantId).maybeSingle()
-  const ownerLogo = normalizeLogo(owner.data?.factura_logo_url)
-  if (ownerLogo) return ownerLogo
-
-  const scoped = await db.from("usuarios").select("factura_logo_url").eq("tenant_id", tenantId).limit(50)
-  if (!scoped.error && Array.isArray(scoped.data)) {
-    const scopedLogo = scoped.data.map((row: any) => normalizeLogo(row?.factura_logo_url)).find(Boolean)
-    if (scopedLogo) return scopedLogo
-  }
-
-  if (actorUserId) {
-    const actor = await db.from("usuarios").select("factura_logo_url").eq("id", actorUserId).maybeSingle()
-    const actorLogo = normalizeLogo(actor.data?.factura_logo_url)
-    if (actorLogo) return actorLogo
-  }
-
-  return null
-}
-
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  try {
-    const db = await createClient()
-    const {
-      data: { user },
-    } = await db.auth.getUser()
-
-    if (user) {
-      const tenantId = getTenantId(user)
-      const tenantLogo = await resolveTenantLogo(db, tenantId, user.id)
-      if (tenantLogo) {
-        return NextResponse.json({ data_url: tenantLogo }, { headers: { "Cache-Control": "no-store" } })
-      }
-    }
-  } catch (error) {
-    console.warn("[branding] No se pudo cargar logo por tenant", error)
-  }
-
   const dataUrl = resolveLogoDataUrl()
   return NextResponse.json({ data_url: dataUrl || null }, { headers: { "Cache-Control": "no-store" } })
 }

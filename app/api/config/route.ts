@@ -31,13 +31,6 @@ const configSchema = z
         }),
       )
       .optional(),
-    factura_logo_url: z.string().optional().nullable(),
-    factura_leyenda: z.string().optional().nullable(),
-    factura_leyenda_footer: z.string().optional().nullable(),
-    factura_emisor_nombre: z.string().optional().nullable(),
-    factura_emisor_domicilio: z.string().optional().nullable(),
-    factura_emisor_telefono: z.string().optional().nullable(),
-    factura_emisor_email: z.string().optional().nullable(),
     wa_template_confirmaciones: z.string().optional().nullable(),
     wa_template_facturas_giftcards: z.string().optional().nullable(),
     wa_template_liquidaciones: z.string().optional().nullable(),
@@ -118,6 +111,13 @@ const sanitizeUsuario = (value: any) => {
     arca_access_token,
     afip_key,
     afip_cert,
+    factura_logo_url,
+    factura_leyenda,
+    factura_leyenda_footer,
+    factura_emisor_nombre,
+    factura_emisor_domicilio,
+    factura_emisor_telefono,
+    factura_emisor_email,
     ...rest
   } = value
   void password
@@ -126,6 +126,13 @@ const sanitizeUsuario = (value: any) => {
   void arca_access_token
   void afip_key
   void afip_cert
+  void factura_logo_url
+  void factura_leyenda
+  void factura_leyenda_footer
+  void factura_emisor_nombre
+  void factura_emisor_domicilio
+  void factura_emisor_telefono
+  void factura_emisor_email
   return rest
 }
 
@@ -189,32 +196,6 @@ const getTenantUsuarioConfigRow = async (db: any, tenantId: string, actorUserId?
   if (!isMissingColumnError(scopedWildcard.error)) return scopedWildcard
 
   return db.from("usuarios").select(USER_CONFIG_SELECT_FALLBACK).eq("tenant_id", tenantId).limit(1).maybeSingle()
-}
-
-const updateTenantUsuarioConfig = async (
-  db: any,
-  tenantId: string,
-  actorUserId: string,
-  updates: Record<string, unknown>,
-) => {
-  const scoped = await db.from("usuarios").update(updates).eq("tenant_id", tenantId).select("id")
-  if (!scoped.error && Array.isArray(scoped.data) && scoped.data.length > 0) {
-    return { error: null }
-  }
-  if (scoped.error && !isMissingColumnError(scoped.error)) {
-    return { error: scoped.error }
-  }
-
-  const owner = await db.from("usuarios").update(updates).eq("id", tenantId).select("id")
-  if (!owner.error && Array.isArray(owner.data) && owner.data.length > 0) {
-    return { error: null }
-  }
-  if (owner.error && !isMissingColumnError(owner.error)) {
-    return { error: owner.error }
-  }
-
-  const actor = await db.from("usuarios").update(updates).eq("id", actorUserId)
-  return { error: actor.error || null }
 }
 
 const getConfiguracionRow = async (db: any, tenantId: string) => {
@@ -408,13 +389,6 @@ export async function PUT(request: Request) {
     metodos_pago_config: metodosPayload,
     metodos_pago: _legacyMetodos,
     horario_local: horarioPayload,
-    factura_logo_url,
-    factura_leyenda,
-    factura_leyenda_footer,
-    factura_emisor_nombre,
-    factura_emisor_domicilio,
-    factura_emisor_telefono,
-    factura_emisor_email,
     wa_template_confirmaciones,
     wa_template_facturas_giftcards,
     wa_template_liquidaciones,
@@ -426,32 +400,6 @@ export async function PUT(request: Request) {
   const requestedExtendedColumns = CONFIG_EXTENDED_COLUMNS.filter((column) =>
     Object.prototype.hasOwnProperty.call(body || {}, column),
   )
-
-  const { data: usuarioActual } = await getTenantUsuarioConfigRow(db, tenantId, user.id)
-  const allowedUsuarioColumns = new Set(Object.keys(usuarioActual || {}))
-  const userUpdatesRaw: Record<string, unknown> = {
-    factura_logo_url: normalizeNullableText(factura_logo_url),
-    factura_leyenda: normalizeNullableText(factura_leyenda),
-    factura_leyenda_footer: normalizeNullableText(factura_leyenda_footer),
-    factura_emisor_nombre: normalizeNullableText(factura_emisor_nombre),
-    factura_emisor_domicilio: normalizeNullableText(factura_emisor_domicilio),
-    factura_emisor_telefono: normalizeNullableText(factura_emisor_telefono),
-    factura_emisor_email: normalizeNullableText(factura_emisor_email),
-  }
-
-  const userUpdates: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(userUpdatesRaw)) {
-    if (value !== undefined && (allowedUsuarioColumns.size === 0 || allowedUsuarioColumns.has(key))) {
-      userUpdates[key] = value
-    }
-  }
-  if (Object.keys(userUpdates).length > 0) {
-    if (allowedUsuarioColumns.has("updated_at")) {
-      userUpdates.updated_at = new Date()
-    }
-    const { error: updateUserError } = await updateTenantUsuarioConfig(db, tenantId, user.id, userUpdates)
-    if (updateUserError) return NextResponse.json({ error: updateUserError.message }, { status: 500 })
-  }
 
   const { data: configLocalActual, error: readConfigError, supportsExtendedColumns } = await getConfiguracionRow(db, tenantId)
   if (readConfigError && !isMissingTableError(readConfigError, "configuracion")) {
@@ -511,15 +459,6 @@ export async function PUT(request: Request) {
       const { error: insertError } = await db.from("configuracion").insert([insertPayload])
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
-  }
-
-  const { error: cleanupConfigError } = await db
-    .from("configuracion")
-    .delete()
-    .eq("usuario_id", tenantId)
-    .neq("usuario_id", tenantId)
-  if (cleanupConfigError && !isMissingTableError(cleanupConfigError, "configuracion")) {
-    return NextResponse.json({ error: cleanupConfigError.message }, { status: 500 })
   }
 
   if (Array.isArray(metodosPayload)) {

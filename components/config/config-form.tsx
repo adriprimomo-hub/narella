@@ -22,12 +22,6 @@ interface Usuario {
   metodos_pago?: string[]
   metodos_pago_config?: MetodoPagoConfig[]
   horario_local?: HorarioLocal[]
-  factura_logo_url?: string | null
-  factura_leyenda?: string | null
-  factura_leyenda_footer?: string | null
-  factura_emisor_nombre?: string | null
-  factura_emisor_domicilio?: string | null
-  factura_emisor_telefono?: string | null
   wa_template_confirmaciones?: string | null
   wa_template_facturas_giftcards?: string | null
   wa_template_liquidaciones?: string | null
@@ -37,12 +31,6 @@ interface Usuario {
 }
 
 type ComunicacionDraft = {
-  factura_logo_url: string
-  factura_leyenda: string
-  factura_leyenda_footer: string
-  factura_emisor_nombre: string
-  factura_emisor_domicilio: string
-  factura_emisor_telefono: string
   wa_template_confirmaciones: string
   wa_template_facturas_giftcards: string
   wa_template_liquidaciones: string
@@ -112,12 +100,6 @@ const MESSAGE_PLACEHOLDERS = {
 const PASSWORD_REQUIRED_MESSAGE = "Ingresa la contraseña."
 
 const toComunicacionDraft = (config?: Usuario | null): ComunicacionDraft => ({
-  factura_logo_url: config?.factura_logo_url || "",
-  factura_leyenda: config?.factura_leyenda || "",
-  factura_leyenda_footer: config?.factura_leyenda_footer || "",
-  factura_emisor_nombre: config?.factura_emisor_nombre || "",
-  factura_emisor_domicilio: config?.factura_emisor_domicilio || "",
-  factura_emisor_telefono: config?.factura_emisor_telefono || "",
   wa_template_confirmaciones: config?.wa_template_confirmaciones || "",
   wa_template_facturas_giftcards: config?.wa_template_facturas_giftcards || "",
   wa_template_liquidaciones: config?.wa_template_liquidaciones || "",
@@ -264,12 +246,6 @@ export function ConfigForm() {
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
-          factura_logo_url: comunicacionDraft.factura_logo_url || null,
-          factura_leyenda: comunicacionDraft.factura_leyenda || null,
-          factura_leyenda_footer: comunicacionDraft.factura_leyenda_footer || null,
-          factura_emisor_nombre: comunicacionDraft.factura_emisor_nombre || null,
-          factura_emisor_domicilio: comunicacionDraft.factura_emisor_domicilio || null,
-          factura_emisor_telefono: comunicacionDraft.factura_emisor_telefono || null,
           wa_template_confirmaciones: comunicacionDraft.wa_template_confirmaciones || null,
           wa_template_facturas_giftcards: comunicacionDraft.wa_template_facturas_giftcards || null,
           wa_template_liquidaciones: comunicacionDraft.wa_template_liquidaciones || null,
@@ -508,7 +484,7 @@ export function ConfigForm() {
           <div className="space-y-1">
             <h3 className="text-sm font-semibold">Mensajes y documentos</h3>
             <p className="text-xs text-muted-foreground">
-              Personaliza textos de envío y branding de facturas/giftcards.
+              Personaliza textos de envío y documentos de comunicación.
             </p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={() => handleComunicacionDialogChange(true)}>
@@ -782,107 +758,16 @@ export function ConfigForm() {
           <DialogHeader>
             <DialogTitle>Mensajes y documentos</DialogTitle>
             <DialogDescription>
-              Gestiona los textos de envío y la personalización visual de factura/giftcard.
+              Gestiona los textos de envío y la plantilla de giftcard.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
             <div className="space-y-3 rounded-lg border p-4">
-              <h4 className="text-sm font-semibold">Factura (branding y emisor)</h4>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label htmlFor="config-factura-emisor-nombre" className="text-xs text-muted-foreground">
-                    Nombre emisor
-                  </label>
-                  <Input
-                    id="config-factura-emisor-nombre"
-                    value={comunicacionDraft.factura_emisor_nombre}
-                    onChange={(e) =>
-                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_nombre: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="config-factura-emisor-domicilio" className="text-xs text-muted-foreground">
-                    Domicilio emisor
-                  </label>
-                  <Input
-                    id="config-factura-emisor-domicilio"
-                    value={comunicacionDraft.factura_emisor_domicilio}
-                    onChange={(e) =>
-                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_domicilio: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="config-factura-emisor-telefono" className="text-xs text-muted-foreground">
-                    Teléfono emisor
-                  </label>
-                  <Input
-                    id="config-factura-emisor-telefono"
-                    value={comunicacionDraft.factura_emisor_telefono}
-                    onChange={(e) =>
-                      setComunicacionDraft((prev) => ({ ...prev, factura_emisor_telefono: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="config-factura-leyenda" className="text-xs text-muted-foreground">
-                  Leyenda
-                </label>
-                <Textarea
-                  id="config-factura-leyenda"
-                  rows={2}
-                  value={comunicacionDraft.factura_leyenda}
-                  onChange={(e) => setComunicacionDraft((prev) => ({ ...prev, factura_leyenda: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="config-factura-leyenda-footer" className="text-xs text-muted-foreground">
-                  Leyenda footer
-                </label>
-                <Textarea
-                  id="config-factura-leyenda-footer"
-                  rows={2}
-                  value={comunicacionDraft.factura_leyenda_footer}
-                  onChange={(e) =>
-                    setComunicacionDraft((prev) => ({ ...prev, factura_leyenda_footer: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="config-factura-logo" className="text-xs text-muted-foreground">
-                  Logo de factura
-                </label>
-                <Input
-                  id="config-factura-logo"
-                  type="file"
-                  accept="image/*"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0]
-                    if (!file) return
-                    try {
-                      const dataUrl = await fileToDataUrl(file)
-                      setComunicacionDraft((prev) => ({ ...prev, factura_logo_url: dataUrl }))
-                    } catch {
-                      alert("No se pudo procesar el logo seleccionado.")
-                    } finally {
-                      event.currentTarget.value = ""
-                    }
-                  }}
-                />
-                {comunicacionDraft.factura_logo_url && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setComunicacionDraft((prev) => ({ ...prev, factura_logo_url: "" }))}
-                  >
-                    Quitar logo personalizado
-                  </Button>
-                )}
-              </div>
+              <h4 className="text-sm font-semibold">Factura (solo por entorno)</h4>
+              <p className="text-xs text-muted-foreground">
+                Los datos de facturación y el logo se administran desde variables de entorno de Vercel.
+              </p>
             </div>
 
             <div className="space-y-3 rounded-lg border p-4">
