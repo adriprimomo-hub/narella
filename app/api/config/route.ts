@@ -36,7 +36,6 @@ const configSchema = z
     wa_template_liquidaciones: z.string().optional().nullable(),
     wa_template_servicios_vencidos: z.string().optional().nullable(),
     wa_template_declaraciones_juradas: z.string().optional().nullable(),
-    giftcard_template_data_url: z.string().optional().nullable(),
   })
   .passthrough()
 
@@ -86,7 +85,6 @@ const CONFIG_SELECT_FULL = [
   "wa_template_liquidaciones",
   "wa_template_servicios_vencidos",
   "wa_template_declaraciones_juradas",
-  "giftcard_template_data_url",
   "created_at",
   "updated_at",
 ].join(", ")
@@ -99,7 +97,6 @@ const CONFIG_EXTENDED_COLUMNS = [
   "wa_template_liquidaciones",
   "wa_template_servicios_vencidos",
   "wa_template_declaraciones_juradas",
-  "giftcard_template_data_url",
 ]
 
 const sanitizeUsuario = (value: any) => {
@@ -365,7 +362,6 @@ export async function GET() {
       wa_template_liquidaciones: configLocal?.wa_template_liquidaciones || null,
       wa_template_servicios_vencidos: configLocal?.wa_template_servicios_vencidos || null,
       wa_template_declaraciones_juradas: configLocal?.wa_template_declaraciones_juradas || null,
-      giftcard_template_data_url: configLocal?.giftcard_template_data_url || null,
     },
     { headers: { "Cache-Control": "no-store" } },
   )
@@ -394,7 +390,6 @@ export async function PUT(request: Request) {
     wa_template_liquidaciones,
     wa_template_servicios_vencidos,
     wa_template_declaraciones_juradas,
-    giftcard_template_data_url,
   } = body || {}
 
   const requestedExtendedColumns = CONFIG_EXTENDED_COLUMNS.filter((column) =>
@@ -426,7 +421,6 @@ export async function PUT(request: Request) {
     configPayloadRaw.wa_template_liquidaciones = normalizeNullableText(wa_template_liquidaciones)
     configPayloadRaw.wa_template_servicios_vencidos = normalizeNullableText(wa_template_servicios_vencidos)
     configPayloadRaw.wa_template_declaraciones_juradas = normalizeNullableText(wa_template_declaraciones_juradas)
-    configPayloadRaw.giftcard_template_data_url = normalizeNullableText(giftcard_template_data_url)
   }
 
   const configPayload: Record<string, unknown> = {}
@@ -496,7 +490,6 @@ export async function PUT(request: Request) {
     wa_template_liquidaciones: configLocalRefrescada?.wa_template_liquidaciones || null,
     wa_template_servicios_vencidos: configLocalRefrescada?.wa_template_servicios_vencidos || null,
     wa_template_declaraciones_juradas: configLocalRefrescada?.wa_template_declaraciones_juradas || null,
-    giftcard_template_data_url: configLocalRefrescada?.giftcard_template_data_url || null,
   })
 }
 

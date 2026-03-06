@@ -34,7 +34,6 @@ const CONFIG_MENSAJERIA_SELECT = [
   "wa_template_liquidaciones",
   "wa_template_servicios_vencidos",
   "wa_template_declaraciones_juradas",
-  "giftcard_template_data_url",
 ].join(", ")
 
 const normalizeTemplate = (value: unknown, fallback: string) => {
@@ -62,10 +61,6 @@ const getTenantConfigRow = async (db: any, tenantId: string) => {
   const full = await selectTenantConfiguracionRow(db, tenantId, CONFIG_MENSAJERIA_SELECT)
   if (!full.error) return full
   if (!isMissingColumnError(full.error)) return full
-
-  const fallback = await selectTenantConfiguracionRow(db, tenantId, "giftcard_template_data_url")
-  if (!fallback.error) return fallback
-  if (!isMissingColumnError(fallback.error)) return fallback
 
   // Fallback universal para instalaciones antiguas con columnas personalizadas parciales.
   return selectTenantConfiguracionRow(db, tenantId, "*")
@@ -99,15 +94,6 @@ export const resolveTenantMensajeriaTemplates = async (
       DEFAULT_DECLARACIONES_JURADAS_TEMPLATE,
     ),
   }
-}
-
-export const resolveTenantGiftcardTemplate = async (db: any, tenantId: string): Promise<string | null> => {
-  const { data, error } = await getTenantConfigRow(db, tenantId)
-  if (error && !isMissingTableError(error, "configuracion")) {
-    throw new Error(error.message || "No se pudo leer la plantilla de giftcard")
-  }
-  const value = String(data?.giftcard_template_data_url || "").trim()
-  return value || null
 }
 
 export const resolveTenantFacturacionConfig = async (

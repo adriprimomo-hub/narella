@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
-import { createClient } from "@/lib/localdb/server"
-import { getTenantId } from "@/lib/localdb/session"
-import { resolveTenantGiftcardTemplate } from "@/lib/tenant-config"
 
 const DEFAULT_GIFTCARD_TEMPLATE_PATH = "certs/giftcards/giftcard-template.pdf"
 const DEFAULT_GIFTCARD_TEMPLATE_PUBLIC_URL = "/templates/giftcard-template.pdf"
@@ -33,26 +30,6 @@ const readTemplateDataUrl = () => {
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  try {
-    const db = await createClient()
-    const {
-      data: { user },
-    } = await db.auth.getUser()
-
-    if (user) {
-      const tenantId = getTenantId(user)
-      const tenantTemplate = await resolveTenantGiftcardTemplate(db, tenantId)
-      if (tenantTemplate) {
-        return NextResponse.json(
-          { data_url: tenantTemplate, public_url: DEFAULT_GIFTCARD_TEMPLATE_PUBLIC_URL },
-          { headers: { "Cache-Control": "no-store" } },
-        )
-      }
-    }
-  } catch (error) {
-    console.warn("[branding] No se pudo cargar plantilla de giftcard por tenant", error)
-  }
-
   const dataUrl = readTemplateDataUrl()
   return NextResponse.json(
     { data_url: dataUrl || null, public_url: DEFAULT_GIFTCARD_TEMPLATE_PUBLIC_URL },

@@ -27,7 +27,6 @@ interface Usuario {
   wa_template_liquidaciones?: string | null
   wa_template_servicios_vencidos?: string | null
   wa_template_declaraciones_juradas?: string | null
-  giftcard_template_data_url?: string | null
 }
 
 type ComunicacionDraft = {
@@ -36,7 +35,6 @@ type ComunicacionDraft = {
   wa_template_liquidaciones: string
   wa_template_servicios_vencidos: string
   wa_template_declaraciones_juradas: string
-  giftcard_template_data_url: string
 }
 
 type AdminUser = {
@@ -105,7 +103,6 @@ const toComunicacionDraft = (config?: Usuario | null): ComunicacionDraft => ({
   wa_template_liquidaciones: config?.wa_template_liquidaciones || "",
   wa_template_servicios_vencidos: config?.wa_template_servicios_vencidos || "",
   wa_template_declaraciones_juradas: config?.wa_template_declaraciones_juradas || "",
-  giftcard_template_data_url: config?.giftcard_template_data_url || "",
 })
 
 export function ConfigForm() {
@@ -229,14 +226,6 @@ export function ConfigForm() {
     }
   }
 
-  const fileToDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result || ""))
-      reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
-      reader.readAsDataURL(file)
-    })
-
   const saveComunicacionConfig = async () => {
     setConfigLoading(true)
     setConfigMessage("")
@@ -251,7 +240,6 @@ export function ConfigForm() {
           wa_template_liquidaciones: comunicacionDraft.wa_template_liquidaciones || null,
           wa_template_servicios_vencidos: comunicacionDraft.wa_template_servicios_vencidos || null,
           wa_template_declaraciones_juradas: comunicacionDraft.wa_template_declaraciones_juradas || null,
-          giftcard_template_data_url: comunicacionDraft.giftcard_template_data_url || null,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -484,7 +472,7 @@ export function ConfigForm() {
           <div className="space-y-1">
             <h3 className="text-sm font-semibold">Mensajes y documentos</h3>
             <p className="text-xs text-muted-foreground">
-              Personaliza textos de envío y documentos de comunicación.
+              Personaliza textos de envío.
             </p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={() => handleComunicacionDialogChange(true)}>
@@ -758,52 +746,11 @@ export function ConfigForm() {
           <DialogHeader>
             <DialogTitle>Mensajes y documentos</DialogTitle>
             <DialogDescription>
-              Gestiona los textos de envío y la plantilla de giftcard.
+              Gestiona los textos de envío.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="space-y-3 rounded-lg border p-4">
-              <h4 className="text-sm font-semibold">Factura (solo por entorno)</h4>
-              <p className="text-xs text-muted-foreground">
-                Los datos de facturación y el logo se administran desde variables de entorno de Vercel.
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-lg border p-4">
-              <h4 className="text-sm font-semibold">Giftcard (plantilla)</h4>
-              <label htmlFor="config-giftcard-template" className="text-xs text-muted-foreground">
-                Plantilla personalizada
-              </label>
-              <Input
-                id="config-giftcard-template"
-                type="file"
-                accept=".pdf,image/*"
-                onChange={async (event) => {
-                  const file = event.target.files?.[0]
-                  if (!file) return
-                  try {
-                    const dataUrl = await fileToDataUrl(file)
-                    setComunicacionDraft((prev) => ({ ...prev, giftcard_template_data_url: dataUrl }))
-                  } catch {
-                    alert("No se pudo procesar la plantilla seleccionada.")
-                  } finally {
-                    event.currentTarget.value = ""
-                  }
-                }}
-              />
-              {comunicacionDraft.giftcard_template_data_url && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setComunicacionDraft((prev) => ({ ...prev, giftcard_template_data_url: "" }))}
-                >
-                  Quitar plantilla personalizada
-                </Button>
-              )}
-            </div>
-
             <div className="space-y-3 rounded-lg border p-4">
               <h4 className="text-sm font-semibold">Textos de envío</h4>
               <div className="space-y-1">
