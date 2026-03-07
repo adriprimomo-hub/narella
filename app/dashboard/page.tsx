@@ -4,7 +4,6 @@ import { TurnosGrid } from "@/components/turnos/turnos-grid"
 import { ClientesList } from "@/components/clientes/clientes-list"
 import { ServiciosList } from "@/components/servicios/servicios-list"
 import { ReportesServicios } from "@/components/reportes/reportes-servicios"
-import { ConfigForm } from "@/components/config/config-form"
 import { EmpleadasPanel } from "@/components/empleadas/empleadas-panel"
 import { FinanzasPanel } from "@/components/finanzas/finanzas-panel"
 import { FacturasPanel } from "@/components/facturacion/facturas-panel"
@@ -77,7 +76,6 @@ function DashboardContent() {
           "inventario",
           "productos",
           "caja",
-          "config",
         ])
       }
       if (isStaff) {
@@ -110,7 +108,6 @@ function DashboardContent() {
       { key: "personal", label: "Personal" },
       { key: "productos", label: "Productos" },
       { key: "inventario", label: "Insumos" },
-      { key: "config", label: "Configuración" },
     ],
     [],
   )
@@ -244,12 +241,6 @@ function DashboardContent() {
           {allowedTabs.has("facturas") && (
             <TabsContent value="facturas" className="mt-6">
               <FacturasPanel />
-            </TabsContent>
-          )}
-
-          {allowedTabs.has("config") && (
-            <TabsContent value="config" className="mt-6">
-              <ConfigForm />
             </TabsContent>
           )}
         </Tabs>
