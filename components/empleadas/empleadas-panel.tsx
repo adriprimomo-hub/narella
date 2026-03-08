@@ -31,6 +31,7 @@ type FormState = {
   nombre: string
   apellido: string
   telefono: string
+  alias_transferencia: string
   horarios: (HorarioLaboral & { activo: boolean })[]
   activo: boolean
 }
@@ -65,6 +66,7 @@ function buildInitialState(empleada?: Empleada | null): FormState {
     nombre: empleada?.nombre || "",
     apellido: empleada?.apellido || "",
     telefono: empleada?.telefono || "",
+    alias_transferencia: empleada?.alias_transferencia || "",
     horarios: defaultHorarios.map((h) => {
       const existing = (empleada?.horarios || []).find((eh) => eh.dia === h.dia)
       return existing
@@ -86,6 +88,7 @@ function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
   const nombreId = `${formId}-nombre`
   const apellidoId = `${formId}-apellido`
   const telefonoId = `${formId}-telefono`
+  const aliasTransferenciaId = `${formId}-alias-transferencia`
   const [formData, setFormData] = useState<FormState>(() => buildInitialState(empleada))
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState("")
@@ -200,6 +203,15 @@ function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
             value={formData.telefono}
             onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
             placeholder="11 5555 5555"
+          />
+        </div>
+        <div>
+          <label htmlFor={aliasTransferenciaId} className="text-sm font-medium">Alias para transferencia</label>
+          <Input
+            id={aliasTransferenciaId}
+            value={formData.alias_transferencia}
+            onChange={(e) => setFormData({ ...formData, alias_transferencia: e.target.value })}
+            placeholder="alias.cuenta"
           />
         </div>
       </div>
@@ -491,6 +503,9 @@ export function EmpleadasPanel() {
                         {e.nombre} {e.apellido}
                       </span>
                       <p className="text-xs text-muted-foreground">{e.telefono}</p>
+                      {e.alias_transferencia ? (
+                        <p className="text-xs text-muted-foreground">Alias: {e.alias_transferencia}</p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{horariosResumidos[e.id] || "Sin horario"}</TableCell>
                     <TableCell>

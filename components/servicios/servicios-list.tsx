@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -72,6 +72,9 @@ export function ServiciosList() {
   const [selected, setSelected] = useState<Servicio | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [loadingSelected, setLoadingSelected] = useState(false)
+  const [selectedError, setSelectedError] = useState<string | null>(null)
+  const editRequestRef = useRef(0)
   const [search, setSearch] = useState("")
   const servicios = Array.isArray(serviciosResponse?.items) ? serviciosResponse.items : []
   const pagination = serviciosResponse?.pagination || {
@@ -129,6 +132,33 @@ export function ServiciosList() {
       : selectedFromList
     : null
 
+  const openEditModal = async (servicio: Servicio) => {
+    const requestId = editRequestRef.current + 1
+    editRequestRef.current = requestId
+    setEditingId(servicio.id)
+    setSelected(null)
+    setSelectedError(null)
+    setLoadingSelected(true)
+    setShowForm(true)
+    try {
+      const res = await fetch(`/api/servicios/${servicio.id}`)
+      if (!res.ok) {
+        throw new Error("No se pudo cargar el servicio.")
+      }
+      const payload = await res.json()
+      if (editRequestRef.current !== requestId) return
+      setSelected(cloneServicio(payload))
+    } catch {
+      if (editRequestRef.current !== requestId) return
+      setSelected(cloneServicio(servicio))
+      setSelectedError("No se pudo cargar el servicio completo. Se muestran los datos disponibles.")
+    } finally {
+      if (editRequestRef.current === requestId) {
+        setLoadingSelected(false)
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       {isAdmin && (
@@ -137,6 +167,8 @@ export function ServiciosList() {
             onClick={() => {
               setEditingId(null)
               setSelected(null)
+              setLoadingSelected(false)
+              setSelectedError(null)
               setShowForm(true)
             }}
             className="gap-2"
@@ -214,11 +246,7 @@ export function ServiciosList() {
                             <Button
                               size="sm"
                               variant="secondary"
-                              onClick={() => {
-                                setEditingId(servicio.id)
-                                setSelected(cloneServicio(servicio))
-                                setShowForm(true)
-                              }}
+                              onClick={() => void openEditModal(servicio)}
                               className="gap-1.5"
                             >
                               <PencilIcon className="h-4 w-4" />
@@ -273,9 +301,12 @@ export function ServiciosList() {
         open={showForm}
         onOpenChange={(open) => {
           if (!open) {
+            editRequestRef.current += 1
             setShowForm(false)
             setEditingId(null)
             setSelected(null)
+            setLoadingSelected(false)
+            setSelectedError(null)
           }
         }}
       >
@@ -286,7 +317,8 @@ export function ServiciosList() {
               Formulario para {editingId ? "editar" : "crear"} un servicio.
             </DialogDescription>
           </DialogHeader>
-          {editingId && !selectedForForm ? (
+          {selectedError ? <p className="text-sm text-amber-600">{selectedError}</p> : null}
+          {editingId && (loadingSelected || !selectedForForm) ? (
             <p className="text-sm text-muted-foreground">Cargando datos del servicio...</p>
           ) : (
             <ServicioForm

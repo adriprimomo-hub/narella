@@ -41,6 +41,15 @@ const buildProductoNota = (base: string, comisionStaff: boolean, staffEmpleadaId
   return `${base} |comision_staff=${marker}${suffix}`
 }
 
+const normalizeStaffOrigenId = (value: unknown) => {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.toLowerCase()
+  if (normalized === "sin_asignar" || normalized === "ninguna") return null
+  return trimmed
+}
+
 const formatDayMonth = (value: string | null | undefined) => {
   if (!value) return ""
   const date = new Date(value)
@@ -277,10 +286,7 @@ export async function POST(request: Request) {
   const serviciosAgregadosRows = serviciosAgregados
     .filter((s) => s.servicio_id)
     .map((s) => {
-      const staffOrigenId =
-        typeof s.agregado_por_empleada_id === "string" && s.agregado_por_empleada_id.trim().length > 0
-          ? s.agregado_por_empleada_id
-          : null
+      const staffOrigenId = normalizeStaffOrigenId(s.agregado_por_empleada_id)
       const origenStaffValido = Boolean(s.origen_staff === true && staffOrigenId)
       return {
         servicio_id: s.servicio_id,
@@ -318,10 +324,7 @@ export async function POST(request: Request) {
   const productosAgregadosSnapshot = productos
     .filter((p) => Boolean(p.producto_id) && Number(p.cantidad || 0) > 0)
     .map((p) => {
-      const staffOrigenId =
-        typeof p.agregado_por_empleada_id === "string" && p.agregado_por_empleada_id.trim().length > 0
-          ? p.agregado_por_empleada_id
-          : null
+      const staffOrigenId = normalizeStaffOrigenId(p.agregado_por_empleada_id)
       const origenStaffValido = Boolean(p.origen_staff === true && staffOrigenId)
       return {
         producto_id: p.producto_id,
@@ -571,10 +574,7 @@ export async function POST(request: Request) {
     })
 
     // Registrar venta de producto
-    const staffOrigenId =
-      typeof prod.agregado_por_empleada_id === "string" && prod.agregado_por_empleada_id.trim().length > 0
-        ? prod.agregado_por_empleada_id
-        : null
+    const staffOrigenId = normalizeStaffOrigenId(prod.agregado_por_empleada_id)
     const productoComisionaStaff = Boolean(prod.origen_staff === true && staffOrigenId)
     const empleadaComisionStaff = productoComisionaStaff ? staffOrigenId : null
     const notaProducto = buildProductoNota(`Venta en turno ${turnoId}`, productoComisionaStaff, empleadaComisionStaff)

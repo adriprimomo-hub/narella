@@ -71,7 +71,7 @@ type LiquidacionItem = {
 type LiquidacionDetalle = {
   desde: string
   hasta: string
-  empleada: { id: string; nombre: string; apellido?: string | null }
+  empleada: { id: string; nombre: string; apellido?: string | null; alias_transferencia?: string | null }
   items: LiquidacionItem[]
   totales: { comision: number; adelantos: number; neto: number }
 }
@@ -79,6 +79,15 @@ type LiquidacionDetalle = {
 const isMissingTableError = (error: any) => {
   const code = String(error?.code || "")
   return code === "42P01" || code === "PGRST205"
+}
+
+const isMissingColumnError = (error: any, column: string) => {
+  const message = String(error?.message || "").toLowerCase()
+  const code = String(error?.code || "")
+  const col = String(column || "").toLowerCase()
+  if (!col) return false
+  if (code === "42703" || code === "PGRST204") return message.includes(col)
+  return message.includes("column") && message.includes(col)
 }
 
 const parseDate = (value: string | null) => {
@@ -153,6 +162,15 @@ const hasComisionMarker = (nota: string | null | undefined) => {
   return marker?.[1] === "1"
 }
 
+const normalizeStaffOrigenId = (value: unknown) => {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.toLowerCase()
+  if (normalized === "sin_asignar" || normalized === "ninguna") return null
+  return trimmed
+}
+
 export async function GET(request: Request) {
   try {
     const db = await createClient()
@@ -185,18 +203,25 @@ export async function GET(request: Request) {
 
     let empleadaNombre = "Sin asignar"
     let empleadaApellido: string | null = null
+    let empleadaAliasTransferencia: string | null = null
     if (empleadaId !== "sin_asignar") {
-      const { data: empleada, error: empleadaError } = await db
-        .from("empleadas")
-        .select("id, nombre, apellido")
-        .eq("id", empleadaId)
-        .eq("usuario_id", tenantId)
-        .single()
+      const loadEmpleada = async (withAlias: boolean) =>
+        db
+          .from("empleadas")
+          .select(withAlias ? "id, nombre, apellido, alias_transferencia" : "id, nombre, apellido")
+          .eq("id", empleadaId)
+          .eq("usuario_id", tenantId)
+          .single()
+      let { data: empleada, error: empleadaError } = await loadEmpleada(true)
+      if (empleadaError && isMissingColumnError(empleadaError, "alias_transferencia")) {
+        ;({ data: empleada, error: empleadaError } = await loadEmpleada(false))
+      }
       if (empleadaError) {
         return NextResponse.json({ error: "Empleada no encontrada" }, { status: 404 })
       }
       empleadaNombre = empleada?.nombre || empleadaNombre
       empleadaApellido = empleada?.apellido ?? null
+      empleadaAliasTransferencia = empleada?.alias_transferencia ?? null
     }
 
     const { data: pagos, error: pagosError } = await db
@@ -439,11 +464,7 @@ export async function GET(request: Request) {
       serviciosAgregadosTurno.forEach((extra, extraIndex) => {
         if (!extra?.servicio_id || !serviciosMap.has(extra.servicio_id)) return
         const staffOrigenId =
-          extra.origen_staff === true &&
-          typeof extra.agregado_por_empleada_id === "string" &&
-          extra.agregado_por_empleada_id.trim().length > 0
-            ? extra.agregado_por_empleada_id
-            : null
+          extra.origen_staff === true ? normalizeStaffOrigenId(extra.agregado_por_empleada_id) : null
         if (!staffOrigenId || staffOrigenId !== empleadaId) return
 
         const resultado = calcularComisionServicio(extra.servicio_id, staffOrigenId, toPositiveQuantity(extra.cantidad, 1))
@@ -528,6 +549,7 @@ export async function GET(request: Request) {
         id: empleadaId,
         nombre: empleadaNombre,
         apellido: empleadaApellido,
+        alias_transferencia: empleadaAliasTransferencia,
       },
       items: sortedItems,
       totales: {

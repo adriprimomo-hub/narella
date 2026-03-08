@@ -50,6 +50,53 @@ const resolveCategoriaValue = async (
   return nombre || "principal"
 }
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const db = await createClient()
+  const {
+    data: { user },
+  } = await db.auth.getUser()
+  const { id } = await params
+
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user)
+  const role = await getUserRole(db, user.id)
+  const isAdmin = isAdminRole(role)
+
+  const { data: servicio, error } = await db
+    .from("servicios")
+    .select("*")
+    .eq("id", id)
+    .eq("usuario_id", tenantId)
+    .maybeSingle()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!servicio) return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
+
+  if (!isAdmin) {
+    return NextResponse.json({
+      ...servicio,
+      comision_pct: null,
+      comision_monto_fijo: null,
+      empleadas_comision: [],
+    })
+  }
+
+  const { data: comisiones, error: comisionesError } = await db
+    .from("servicio_empleada_comisiones")
+    .select("*")
+    .eq("usuario_id", tenantId)
+    .eq("servicio_id", id)
+
+  if (comisionesError && comisionesError.code !== "42P01") {
+    return NextResponse.json({ error: comisionesError.message }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    ...servicio,
+    empleadas_comision: Array.isArray(comisiones) ? comisiones : [],
+  })
+}
+
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = await createClient()
   const {

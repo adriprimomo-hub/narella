@@ -16,12 +16,22 @@ const empleadaUpdateSchema = z
     nombre: z.string().trim().min(1).optional(),
     apellido: z.string().trim().optional(),
     telefono: z.string().trim().optional(),
+    alias_transferencia: z.string().trim().optional(),
     horarios: z.array(horarioSchema).optional(),
     activo: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Debe enviar al menos un campo",
   })
+
+const isMissingColumnError = (error: any, column: string) => {
+  const message = String(error?.message || "").toLowerCase()
+  const code = String(error?.code || "")
+  const col = String(column || "").toLowerCase()
+  if (!col) return false
+  if (code === "42703" || code === "PGRST204") return message.includes(col)
+  return message.includes("column") && message.includes(col)
+}
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = await createClient()
@@ -41,16 +51,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (payload.nombre !== undefined) updatePayload.nombre = payload.nombre
   if (payload.apellido !== undefined) updatePayload.apellido = payload.apellido
   if (payload.telefono !== undefined) updatePayload.telefono = payload.telefono?.trim() || null
+  if (payload.alias_transferencia !== undefined) {
+    updatePayload.alias_transferencia = payload.alias_transferencia?.trim() || null
+  }
   if (payload.horarios !== undefined) updatePayload.horarios = horarios
   if (payload.activo !== undefined) updatePayload.activo = payload.activo
 
-  const { data, error } = await db
+  let { data, error } = await db
     .from("empleadas")
     .update(updatePayload)
     .eq("id", id)
     .eq("usuario_id", user.id)
     .select("*")
     .single()
+
+  if (error && isMissingColumnError(error, "alias_transferencia")) {
+    const { alias_transferencia: _alias, ...legacyPayload } = updatePayload
+    ;({ data, error } = await db
+      .from("empleadas")
+      .update(legacyPayload)
+      .eq("id", id)
+      .eq("usuario_id", user.id)
+      .select("*")
+      .single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

@@ -5,7 +5,7 @@ import { formatDate, formatDateRange } from "./date-format"
 type LiquidacionPDF = {
   desde: string
   hasta: string
-  empleada: { nombre: string; apellido?: string | null }
+  empleada: { nombre: string; apellido?: string | null; alias_transferencia?: string | null }
   items: Array<{
     tipo: "servicio" | "producto" | "adelanto"
     fecha?: string | null
@@ -20,8 +20,12 @@ type LiquidacionPDF = {
 export function buildLiquidacionPDF(resumen: LiquidacionPDF) {
   const doc = new jsPDF()
   const empleadaLabel = `${resumen.empleada.nombre} ${resumen.empleada.apellido || ""}`.trim()
+  const aliasTransferencia = String(resumen.empleada.alias_transferencia || "").trim()
   doc.text(`Liquidacion - ${empleadaLabel}`, 14, 18)
   doc.text(formatDateRange(resumen.desde, resumen.hasta), 14, 26)
+  if (aliasTransferencia) {
+    doc.text(`Alias transferencia: ${aliasTransferencia}`, 14, 32)
+  }
 
   const rowTypes: Array<"servicio" | "producto" | "adelanto" | "total"> = []
   const rows = resumen.items.map((item) => {
@@ -51,7 +55,7 @@ export function buildLiquidacionPDF(resumen: LiquidacionPDF) {
   autoTable(doc, {
     head: [["Fecha", "Servicios", "Productos", "Comision", "Adelantos", "Neto a cobrar"]],
     body: rows,
-    startY: 32,
+    startY: aliasTransferencia ? 38 : 32,
     didParseCell: (data) => {
       if (data.section !== "body") return
       const rowType = rowTypes[data.row.index]

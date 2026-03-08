@@ -14,9 +14,19 @@ const empleadaSchema = z.object({
   nombre: z.string().trim().min(1),
   apellido: z.string().trim().optional(),
   telefono: z.string().trim().optional(),
+  alias_transferencia: z.string().trim().optional(),
   horarios: z.array(horarioSchema).optional(),
   activo: z.boolean().optional(),
 })
+
+const isMissingColumnError = (error: any, column: string) => {
+  const message = String(error?.message || "").toLowerCase()
+  const code = String(error?.code || "")
+  const col = String(column || "").toLowerCase()
+  if (!col) return false
+  if (code === "42703" || code === "PGRST204") return message.includes(col)
+  return message.includes("column") && message.includes(col)
+}
 
 export async function GET(request: Request) {
   const db = await createClient()
@@ -68,20 +78,22 @@ export async function POST(request: Request) {
   const horarios = Array.isArray(payload.horarios) ? payload.horarios : []
 
   const telefono = payload.telefono?.trim() || null
-  const { data, error } = await db
-    .from("empleadas")
-    .insert([
-      {
-        usuario_id: user.id,
-        nombre: payload.nombre,
-        apellido: payload.apellido ?? "",
-        telefono,
-        horarios,
-        activo: payload.activo ?? true,
-      },
-    ])
-    .select("*")
-    .single()
+  const aliasTransferencia = payload.alias_transferencia?.trim() || null
+  const insertPayload = {
+    usuario_id: user.id,
+    nombre: payload.nombre,
+    apellido: payload.apellido ?? "",
+    telefono,
+    alias_transferencia: aliasTransferencia,
+    horarios,
+    activo: payload.activo ?? true,
+  }
+
+  let { data, error } = await db.from("empleadas").insert([insertPayload]).select("*").single()
+  if (error && isMissingColumnError(error, "alias_transferencia")) {
+    const { alias_transferencia: _alias, ...legacyPayload } = insertPayload
+    ;({ data, error } = await db.from("empleadas").insert([legacyPayload]).select("*").single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

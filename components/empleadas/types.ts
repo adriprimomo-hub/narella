@@ -9,6 +9,7 @@ export interface Empleada {
   nombre: string
   apellido: string
   telefono?: string | null
+  alias_transferencia?: string | null
   horarios?: HorarioLaboral[]
   activo: boolean
 }

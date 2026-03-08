@@ -291,6 +291,7 @@ export const db: any = {
       nombre: "Ana",
       apellido: "Lopez",
       telefono: "1122334455",
+      alias_transferencia: "ana.lopez.mp",
       activo: true,
       horarios: [
         { dia: 1, desde: "09:00", hasta: "17:00" },
@@ -308,6 +309,7 @@ export const db: any = {
       nombre: "Belen",
       apellido: "Gomez",
       telefono: "1100112233",
+      alias_transferencia: "belen.gomez.mp",
       activo: true,
       horarios: [
         { dia: 2, desde: "10:00", hasta: "18:00" },
@@ -602,6 +604,22 @@ const normalizeEmpleadasApellido = () => {
 }
 
 normalizeEmpleadasApellido()
+
+const normalizeEmpleadasAliasTransferencia = () => {
+  if (!Array.isArray(db.empleadas) || db.empleadas.length === 0) return
+  let changed = false
+  db.empleadas.forEach((empleada: any) => {
+    if (!("alias_transferencia" in empleada)) {
+      empleada.alias_transferencia = null
+      changed = true
+    }
+  })
+  if (changed) {
+    persistLocalDb(db as any)
+  }
+}
+
+normalizeEmpleadasAliasTransferencia()
 
 const ensureGiftcardsTable = () => {
   if (!("giftcards" in db)) {

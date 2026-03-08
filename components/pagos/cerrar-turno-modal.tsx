@@ -108,6 +108,7 @@ const createLocalId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const STAFF_UNASSIGNED_VALUE = "sin_asignar"
 
 export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: CerrarTurnoModalProps) {
   const { data: senas } = useSWR<Sena[]>(`/api/senas?cliente_id=${turno.cliente_id}&estado=pendiente`, fetcher)
@@ -326,6 +327,7 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
   const agregarServicio = (servicio_id: string) => {
     const srv = servicios.find((s) => s.id === servicio_id)
     if (!srv) return
+    const staffDefaultId = selectedEmpleada || null
     const precio = tipoPrecio === "descuento" && srv.precio_descuento != null ? srv.precio_descuento : srv.precio_lista
     setServiciosAgregados((prev) => [
       ...prev,
@@ -334,8 +336,8 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
         servicio_id,
         cantidad: "",
         precio_unitario: precio,
-        origen_staff: false,
-        agregado_por_empleada_id: null,
+        origen_staff: Boolean(staffDefaultId),
+        agregado_por_empleada_id: staffDefaultId,
         agregado_por_user_id: null,
       },
     ])
@@ -677,16 +679,45 @@ export function CerrarTurnoModal({ turno, onSuccess, servicios, empleadas }: Cer
               <div className="space-y-2">
                 {serviciosAgregados.map((s) => {
                   const detalle = servicios.find((d) => d.id === s.servicio_id)
-                  const origenStaffLabel = getOrigenStaffLabel(s)
+                  const assignedStaffId =
+                    s.origen_staff === true &&
+                    typeof s.agregado_por_empleada_id === "string" &&
+                    empleadasMap.has(s.agregado_por_empleada_id)
+                      ? s.agregado_por_empleada_id
+                      : STAFF_UNASSIGNED_VALUE
                   return (
                     <div key={s.uid} className="flex items-center gap-2 text-sm">
                       <Badge variant="outline">{detalle?.nombre || "Servicio"}</Badge>
-                      {origenStaffLabel && (
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <UserIcon className="h-3 w-3" />
-                          {origenStaffLabel}
-                        </span>
-                      )}
+                      <div className="min-w-[180px]">
+                        <Select
+                          value={assignedStaffId}
+                          onValueChange={(value) =>
+                            setServiciosAgregados((prev) =>
+                              prev.map((item) =>
+                                item.uid === s.uid
+                                  ? {
+                                      ...item,
+                                      origen_staff: value !== STAFF_UNASSIGNED_VALUE,
+                                      agregado_por_empleada_id: value === STAFF_UNASSIGNED_VALUE ? null : value,
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Sin asignar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={STAFF_UNASSIGNED_VALUE}>Sin asignar a liquidación</SelectItem>
+                            {empleadas.map((empleada) => (
+                              <SelectItem key={empleada.id} value={empleada.id}>
+                                {[empleada.nombre, empleada.apellido].filter(Boolean).join(" ").trim() || "Staff"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="flex flex-col">
                         <Input
                           type="number"

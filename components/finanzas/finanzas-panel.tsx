@@ -82,7 +82,7 @@ type LiquidacionItem = {
 type LiquidacionDetalle = {
   desde: string
   hasta: string
-  empleada: { id: string; nombre: string; apellido?: string | null }
+  empleada: { id: string; nombre: string; apellido?: string | null; alias_transferencia?: string | null }
   items: LiquidacionItem[]
   totales: { comision: number; adelantos: number; neto: number }
 }
@@ -95,6 +95,7 @@ type LiquidacionHistorial = {
   empleada_id: string
   empleada_nombre: string
   empleada_apellido?: string | null
+  empleada_alias_transferencia?: string | null
   items: LiquidacionItem[]
   total_comision: number
   total_adelantos: number
@@ -120,6 +121,13 @@ export function FinanzasPanel() {
 
   const clientesList = Array.isArray(clientes) ? clientes : []
   const empleadasList = Array.isArray(empleadas) ? empleadas : []
+  const aliasTransferenciaPorEmpleada = useMemo(() => {
+    const map = new Map<string, string | null>()
+    empleadasList.forEach((e) => {
+      map.set(e.id, e.alias_transferencia || null)
+    })
+    return map
+  }, [empleadasList])
   const serviciosList = Array.isArray(servicios) ? servicios : []
   const metodosPagoList = useMemo(() => {
     const normalizados = Array.isArray(config?.metodos_pago_config)
@@ -298,6 +306,7 @@ export function FinanzasPanel() {
       id: row.empleada_id,
       nombre: row.empleada_nombre || "Sin asignar",
       apellido: row.empleada_apellido || null,
+      alias_transferencia: row.empleada_alias_transferencia || aliasTransferenciaPorEmpleada.get(row.empleada_id) || null,
     },
     items: Array.isArray(row.items) ? row.items : [],
     totales: {
@@ -1156,6 +1165,11 @@ export function FinanzasPanel() {
                           {liquidacion.empleada.nombre}
                           {liquidacion.empleada.apellido ? ` ${liquidacion.empleada.apellido}` : ""}
                         </span>
+                        {liquidacion.empleada.alias_transferencia ? (
+                          <p className="text-xs text-muted-foreground">
+                            Alias transferencia: {liquidacion.empleada.alias_transferencia}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
 

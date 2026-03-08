@@ -16,6 +16,7 @@ const liquidacionSchema = z.object({
   empleada: z.object({
     nombre: z.string().min(1),
     apellido: z.string().optional().nullable(),
+    alias_transferencia: z.string().optional().nullable(),
   }),
   items: z.array(
     z.object({

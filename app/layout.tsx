@@ -10,6 +10,10 @@ import { Toaster } from "@/components/ui/toaster"
 export const metadata: Metadata = {
   title: "Narella Turnos",
   generator: "v0.app",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 }
 
 export default function RootLayout({

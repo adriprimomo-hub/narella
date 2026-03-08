@@ -9,7 +9,7 @@ export type ShareLinkResponse = {
 export type LiquidacionSharePayload = {
   desde: string
   hasta: string
-  empleada: { nombre: string; apellido?: string | null }
+  empleada: { nombre: string; apellido?: string | null; alias_transferencia?: string | null }
   items: Array<{
     id?: string
     tipo: "servicio" | "producto" | "adelanto"
