@@ -18,6 +18,7 @@ const empleadaUpdateSchema = z
     telefono: z.string().trim().optional(),
     alias_transferencia: z.string().trim().optional(),
     tipo_profesional_id: z.string().trim().optional().nullable(),
+    tipo_profesional_ids: z.array(z.string().trim().min(1)).optional(),
     horarios: z.array(horarioSchema).optional(),
     activo: z.boolean().optional(),
   })
@@ -39,6 +40,84 @@ const isMissingTableError = (error: any) => {
   return code === "42P01" || code === "PGRST205"
 }
 
+const uniqueTrimmed = (values: Array<string | null | undefined>) => {
+  const unique = new Set<string>()
+  values.forEach((value) => {
+    const trimmed = String(value || "").trim()
+    if (trimmed) unique.add(trimmed)
+  })
+  return Array.from(unique)
+}
+
+const resolveTipoIdsForUpdate = (payload: z.infer<typeof empleadaUpdateSchema>) => {
+  if (Array.isArray(payload.tipo_profesional_ids)) return uniqueTrimmed(payload.tipo_profesional_ids)
+  if (payload.tipo_profesional_id !== undefined) return uniqueTrimmed([payload.tipo_profesional_id])
+  return null
+}
+
+const validateTipoIds = async (
+  db: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  tipoIds: string[],
+) => {
+  if (tipoIds.length === 0) return { ids: [] as string[] }
+
+  const { data: tipos, error } = await db
+    .from("tipos_profesionales")
+    .select("id")
+    .eq("usuario_id", userId)
+    .in("id", tipoIds)
+
+  if (error) {
+    if (isMissingTableError(error)) return { ids: [] as string[] }
+    return { ids: [] as string[], error: NextResponse.json({ error: error.message }, { status: 500 }) }
+  }
+
+  const foundIds = new Set((tipos || []).map((tipo: any) => String(tipo.id)))
+  const missing = tipoIds.filter((id) => !foundIds.has(id))
+  if (missing.length > 0) {
+    return {
+      ids: [] as string[],
+      error: NextResponse.json({ error: "Uno o más tipos profesionales no existen." }, { status: 404 }),
+    }
+  }
+
+  return { ids: tipoIds }
+}
+
+const syncEmpleadaTipos = async (
+  db: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  empleadaId: string,
+  tipoIds: string[],
+) => {
+  const { error: deleteError } = await db
+    .from("empleada_tipos_profesionales")
+    .delete()
+    .eq("usuario_id", userId)
+    .eq("empleada_id", empleadaId)
+
+  if (deleteError && !isMissingTableError(deleteError)) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  }
+  if (deleteError && isMissingTableError(deleteError)) {
+    return null
+  }
+  if (tipoIds.length === 0) return null
+
+  const rows = tipoIds.map((tipoId) => ({
+    usuario_id: userId,
+    empleada_id: empleadaId,
+    tipo_profesional_id: tipoId,
+  }))
+
+  const { error: insertError } = await db.from("empleada_tipos_profesionales").insert(rows)
+  if (insertError && !isMissingTableError(insertError)) {
+    return NextResponse.json({ error: insertError.message }, { status: 500 })
+  }
+  return null
+}
+
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const db = await createClient()
   const {
@@ -54,36 +133,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (validationResponse) return validationResponse
   const horarios = Array.isArray(payload.horarios) ? payload.horarios : []
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }
+
   if (payload.nombre !== undefined) updatePayload.nombre = payload.nombre
   if (payload.apellido !== undefined) updatePayload.apellido = payload.apellido
   if (payload.telefono !== undefined) updatePayload.telefono = payload.telefono?.trim() || null
   if (payload.alias_transferencia !== undefined) {
     updatePayload.alias_transferencia = payload.alias_transferencia?.trim() || null
   }
-  if (payload.tipo_profesional_id !== undefined) {
-    const tipoProfesionalId = payload.tipo_profesional_id?.trim() || null
-    if (tipoProfesionalId) {
-      const { data: tipoProfesional, error: tipoError } = await db
-        .from("tipos_profesionales")
-        .select("id")
-        .eq("id", tipoProfesionalId)
-        .eq("usuario_id", user.id)
-        .maybeSingle()
-      if (tipoError && !isMissingTableError(tipoError)) {
-        return NextResponse.json({ error: tipoError.message }, { status: 500 })
-      }
-      if (!tipoError && !tipoProfesional) {
-        return NextResponse.json({ error: "El tipo profesional seleccionado no existe." }, { status: 404 })
-      }
-      if (tipoError && isMissingTableError(tipoError)) {
-        updatePayload.tipo_profesional_id = null
-      } else {
-        updatePayload.tipo_profesional_id = tipoProfesionalId
-      }
-    } else {
-      updatePayload.tipo_profesional_id = null
-    }
+
+  const tipoIdsToUpdate = resolveTipoIdsForUpdate(payload)
+  let validatedTipoIds: string[] | null = null
+  if (tipoIdsToUpdate !== null) {
+    const validated = await validateTipoIds(db, user.id, tipoIdsToUpdate)
+    if (validated.error) return validated.error
+    validatedTipoIds = validated.ids
+    updatePayload.tipo_profesional_id = validatedTipoIds[0] || null
   }
+
   if (payload.horarios !== undefined) updatePayload.horarios = horarios
   if (payload.activo !== undefined) updatePayload.activo = payload.activo
 
@@ -116,7 +182,21 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  if (validatedTipoIds !== null) {
+    const syncError = await syncEmpleadaTipos(db, user.id, id, validatedTipoIds)
+    if (syncError) return syncError
+  }
+
+  return NextResponse.json({
+    ...data,
+    tipo_profesional_ids:
+      validatedTipoIds !== null
+        ? validatedTipoIds
+        : data?.tipo_profesional_id
+          ? [String(data.tipo_profesional_id)]
+          : [],
+  })
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -138,9 +218,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (staff) {
     const { data: turnos } = await db
       .from("turnos")
-      .select(
-        "id, empleada_id, empleada_final_id, empleada_final_nombre, empleada_final_apellido",
-      )
+      .select("id, empleada_id, empleada_final_id, empleada_final_nombre, empleada_final_apellido")
       .eq("usuario_id", user.id)
 
     if (Array.isArray(turnos) && turnos.length > 0) {

@@ -24,6 +24,7 @@ type EmpleadaDisponible = {
   nombre: string
   apellido?: string | null
   tipo_profesional_id?: string | null
+  tipo_profesional_ids?: string[]
 }
 
 type TipoProfesional = {
@@ -224,13 +225,21 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
     }
   }
 
+  const getTiposProfesionalesDeEmpleada = (empleada: EmpleadaDisponible) =>
+    Array.from(
+      new Set([
+        ...(Array.isArray(empleada.tipo_profesional_ids) ? empleada.tipo_profesional_ids : []),
+        ...(empleada.tipo_profesional_id ? [empleada.tipo_profesional_id] : []),
+      ]),
+    )
+
   const asignarTodasPorTipo = () => {
     const nextSelected =
       tipoProfesionalMasivo === "all"
         ? empleadas
         : tipoProfesionalMasivo === "none"
-          ? empleadas.filter((e) => !e.tipo_profesional_id)
-          : empleadas.filter((e) => e.tipo_profesional_id === tipoProfesionalMasivo)
+          ? empleadas.filter((e) => getTiposProfesionalesDeEmpleada(e).length === 0)
+          : empleadas.filter((e) => getTiposProfesionalesDeEmpleada(e).includes(tipoProfesionalMasivo))
     const nextIds = nextSelected.map((e) => e.id)
     setFormData((prev) => ({
       ...prev,

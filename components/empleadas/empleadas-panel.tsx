@@ -43,7 +43,7 @@ type FormState = {
   apellido: string
   telefono: string
   alias_transferencia: string
-  tipo_profesional_id: string
+  tipo_profesional_ids: string[]
   horarios: (HorarioLaboral & { activo: boolean })[]
   activo: boolean
 }
@@ -74,12 +74,14 @@ const defaultHorarios: (HorarioLaboral & { activo: boolean })[] = diasSemana.map
 }))
 
 function buildInitialState(empleada?: Empleada | null): FormState {
+  const idsFromArray = Array.isArray(empleada?.tipo_profesional_ids) ? empleada.tipo_profesional_ids : []
+  const idsFromLegacy = empleada?.tipo_profesional_id ? [empleada.tipo_profesional_id] : []
   return {
     nombre: empleada?.nombre || "",
     apellido: empleada?.apellido || "",
     telefono: empleada?.telefono || "",
     alias_transferencia: empleada?.alias_transferencia || "",
-    tipo_profesional_id: empleada?.tipo_profesional_id || "",
+    tipo_profesional_ids: Array.from(new Set([...idsFromArray, ...idsFromLegacy])),
     horarios: defaultHorarios.map((h) => {
       const existing = (empleada?.horarios || []).find((eh) => eh.dia === h.dia)
       return existing
@@ -112,7 +114,6 @@ function EmpleadaForm({
   const apellidoId = `${formId}-apellido`
   const telefonoId = `${formId}-telefono`
   const aliasTransferenciaId = `${formId}-alias-transferencia`
-  const tipoProfesionalId = `${formId}-tipo-profesional`
   const [formData, setFormData] = useState<FormState>(() => buildInitialState(empleada))
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState("")
@@ -136,6 +137,21 @@ function EmpleadaForm({
     })
   }
 
+  const toggleTipoProfesional = (tipoId: string) => {
+    setFormData((prev) => {
+      const selected = new Set(prev.tipo_profesional_ids)
+      if (selected.has(tipoId)) {
+        selected.delete(tipoId)
+      } else {
+        selected.add(tipoId)
+      }
+      return {
+        ...prev,
+        tipo_profesional_ids: Array.from(selected),
+      }
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -145,7 +161,7 @@ function EmpleadaForm({
 
     const payload = {
       ...formData,
-      tipo_profesional_id: formData.tipo_profesional_id || null,
+      tipo_profesional_ids: formData.tipo_profesional_ids,
       horarios: formData.horarios.filter((h) => h.activo).map(({ activo, ...rest }) => rest),
     }
 
@@ -241,9 +257,9 @@ function EmpleadaForm({
         </div>
         <div>
           <div className="mb-1 flex items-center justify-between gap-2">
-            <label htmlFor={tipoProfesionalId} className="text-sm font-medium">
-              Tipo profesional
-            </label>
+            <p className="text-sm font-medium">
+              Tipos profesionales
+            </p>
             {canManageTipos ? (
               <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onManageTipos}>
                 <SettingsIcon className="mr-1 h-3 w-3" />
@@ -251,27 +267,26 @@ function EmpleadaForm({
               </Button>
             ) : null}
           </div>
-          <Select
-            value={formData.tipo_profesional_id || "none"}
-            onValueChange={(value) =>
-              setFormData({
-                ...formData,
-                tipo_profesional_id: value === "none" ? "" : value,
+          <div className="space-y-2 rounded-md border p-2">
+            {tiposProfesionales.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sin tipos cargados.</p>
+            ) : (
+              tiposProfesionales.map((tipo) => {
+                const selected = formData.tipo_profesional_ids.includes(tipo.id)
+                return (
+                  <label key={tipo.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleTipoProfesional(tipo.id)}
+                      className="rounded border-border"
+                    />
+                    <span>{tipo.nombre}</span>
+                  </label>
+                )
               })
-            }
-          >
-            <SelectTrigger id={tipoProfesionalId}>
-              <SelectValue placeholder="Sin tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin tipo</SelectItem>
-              {tiposProfesionales.map((tipo) => (
-                <SelectItem key={tipo.id} value={tipo.id}>
-                  {tipo.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            )}
+          </div>
         </div>
       </div>
 
@@ -578,7 +593,17 @@ export function EmpleadasPanel() {
                       ) : null}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {e.tipo_profesional_id ? tiposProfesionalesMap.get(e.tipo_profesional_id) || "No definido" : "Sin tipo"}
+                      {(() => {
+                        const ids = Array.from(
+                          new Set([
+                            ...(Array.isArray(e.tipo_profesional_ids) ? e.tipo_profesional_ids : []),
+                            ...(e.tipo_profesional_id ? [e.tipo_profesional_id] : []),
+                          ]),
+                        )
+                        if (ids.length === 0) return "Sin tipo"
+                        const nombres = ids.map((id) => tiposProfesionalesMap.get(id) || "No definido")
+                        return nombres.join(", ")
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{horariosResumidos[e.id] || "Sin horario"}</TableCell>
                     <TableCell>

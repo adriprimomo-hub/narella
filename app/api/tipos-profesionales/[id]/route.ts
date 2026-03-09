@@ -60,18 +60,32 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const role = await getUserRole(db, user.id)
   if (!isAdminRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const { data: empleadasUsando, error: usoError } = await db
-    .from("empleadas")
-    .select("id")
+  const { data: relacionesEnUso, error: relacionesError } = await db
+    .from("empleada_tipos_profesionales")
+    .select("empleada_id")
     .eq("tipo_profesional_id", id)
     .eq("usuario_id", user.id)
     .limit(1)
 
-  if (usoError && !isMissingTableError(usoError)) {
-    return NextResponse.json({ error: usoError.message }, { status: 500 })
+  if (relacionesError && !isMissingTableError(relacionesError)) {
+    return NextResponse.json({ error: relacionesError.message }, { status: 500 })
   }
 
-  if (Array.isArray(empleadasUsando) && empleadasUsando.length > 0) {
+  let tipoEnUso = Array.isArray(relacionesEnUso) && relacionesEnUso.length > 0
+  if (!tipoEnUso && relacionesError && isMissingTableError(relacionesError)) {
+    const { data: empleadasLegacy, error: legacyError } = await db
+      .from("empleadas")
+      .select("id")
+      .eq("tipo_profesional_id", id)
+      .eq("usuario_id", user.id)
+      .limit(1)
+    if (legacyError && !isMissingTableError(legacyError)) {
+      return NextResponse.json({ error: legacyError.message }, { status: 500 })
+    }
+    tipoEnUso = Array.isArray(empleadasLegacy) && empleadasLegacy.length > 0
+  }
+
+  if (tipoEnUso) {
     return NextResponse.json(
       { error: "No se puede eliminar el tipo profesional porque hay empleadas que lo usan." },
       { status: 400 },

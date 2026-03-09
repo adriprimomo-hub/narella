@@ -342,6 +342,26 @@ export const db: any = {
       updated_at: nowIso,
     },
   ],
+  empleada_tipos_profesionales: [
+    {
+      usuario_id: LOCAL_USER_ID,
+      empleada_id: empleadaAnaId,
+      tipo_profesional_id: tipoProfesionalEstilistaId,
+      created_at: nowIso,
+    },
+    {
+      usuario_id: LOCAL_USER_ID,
+      empleada_id: empleadaAnaId,
+      tipo_profesional_id: tipoProfesionalColoristaId,
+      created_at: nowIso,
+    },
+    {
+      usuario_id: LOCAL_USER_ID,
+      empleada_id: empleadaBelenId,
+      tipo_profesional_id: tipoProfesionalColoristaId,
+      created_at: nowIso,
+    },
+  ],
   servicios: [
     {
       id: servicioCorteId,
@@ -673,6 +693,89 @@ const normalizeEmpleadasTipoProfesional = () => {
 }
 
 normalizeEmpleadasTipoProfesional()
+
+const ensureEmpleadaTiposProfesionalesTable = () => {
+  let changed = false
+  if (!("empleada_tipos_profesionales" in db) || !Array.isArray((db as any).empleada_tipos_profesionales)) {
+    ;(db as any).empleada_tipos_profesionales = []
+    changed = true
+  }
+
+  const tiposIds = new Set(
+    Array.isArray((db as any).tipos_profesionales) ? (db as any).tipos_profesionales.map((tipo: any) => tipo.id) : [],
+  )
+  const empleadasIds = new Set(Array.isArray(db.empleadas) ? db.empleadas.map((empleada: any) => empleada.id) : [])
+  const relaciones = (db as any).empleada_tipos_profesionales as any[]
+  const uniqueKeys = new Set<string>()
+  const cleaned: any[] = []
+
+  relaciones.forEach((relacion) => {
+    if (!relacion) return
+    const empleadaId = String(relacion.empleada_id || "")
+    const tipoId = String(relacion.tipo_profesional_id || "")
+    if (!empleadaId || !tipoId) {
+      changed = true
+      return
+    }
+    if (!empleadasIds.has(empleadaId) || !tiposIds.has(tipoId)) {
+      changed = true
+      return
+    }
+    const key = `${empleadaId}:${tipoId}`
+    if (uniqueKeys.has(key)) {
+      changed = true
+      return
+    }
+    uniqueKeys.add(key)
+    cleaned.push({
+      ...relacion,
+      usuario_id: relacion.usuario_id || LOCAL_USER_ID,
+      empleada_id: empleadaId,
+      tipo_profesional_id: tipoId,
+      created_at: relacion.created_at || nowIso,
+    })
+  })
+
+  if (cleaned.length !== relaciones.length) {
+    ;(db as any).empleada_tipos_profesionales = cleaned
+    changed = true
+  }
+
+  if (Array.isArray(db.empleadas)) {
+    db.empleadas.forEach((empleada: any) => {
+      const legacyTipoId = String(empleada?.tipo_profesional_id || "")
+      if (legacyTipoId && tiposIds.has(legacyTipoId)) {
+        const key = `${empleada.id}:${legacyTipoId}`
+        if (!uniqueKeys.has(key)) {
+          cleaned.push({
+            usuario_id: empleada.usuario_id || LOCAL_USER_ID,
+            empleada_id: empleada.id,
+            tipo_profesional_id: legacyTipoId,
+            created_at: nowIso,
+          })
+          uniqueKeys.add(key)
+          changed = true
+        }
+      }
+
+      const tipoIdsEmpleada = cleaned
+        .filter((relacion) => relacion.empleada_id === empleada.id)
+        .map((relacion) => relacion.tipo_profesional_id)
+      const firstTipo = tipoIdsEmpleada[0] || null
+      if (empleada.tipo_profesional_id !== firstTipo) {
+        empleada.tipo_profesional_id = firstTipo
+        changed = true
+      }
+    })
+  }
+
+  if (changed) {
+    ;(db as any).empleada_tipos_profesionales = cleaned
+    persistLocalDb(db as any)
+  }
+}
+
+ensureEmpleadaTiposProfesionalesTable()
 
 const ensureGiftcardsTable = () => {
   if (!("giftcards" in db)) {
