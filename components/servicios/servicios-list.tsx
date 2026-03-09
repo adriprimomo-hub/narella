@@ -125,18 +125,13 @@ export function ServiciosList() {
       : [],
   })
 
-  const selectedFromList = editingId ? (servicios.find((item) => item.id === editingId) ?? null) : null
-  const selectedForForm = editingId
-    ? selected?.id === editingId
-      ? selected
-      : selectedFromList
-    : null
+  const selectedForForm = editingId ? selected : null
 
   const openEditModal = async (servicio: Servicio) => {
     const requestId = editRequestRef.current + 1
     editRequestRef.current = requestId
     setEditingId(servicio.id)
-    setSelected(null)
+    setSelected(cloneServicio(servicio))
     setSelectedError(null)
     setLoadingSelected(true)
     setShowForm(true)
@@ -318,20 +313,25 @@ export function ServiciosList() {
             </DialogDescription>
           </DialogHeader>
           {selectedError ? <p className="text-sm text-amber-600">{selectedError}</p> : null}
-          {editingId && (loadingSelected || !selectedForForm) ? (
+          {editingId && !selectedForForm ? (
             <p className="text-sm text-muted-foreground">Cargando datos del servicio...</p>
           ) : (
-            <ServicioForm
-              key={editingId || "new"}
-              servicio={selectedForForm}
-              onSuccess={() => {
-                mutate()
-                setEditingId(null)
-                setSelected(null)
-                setPage(1)
-                setShowForm(false)
-              }}
-            />
+            <>
+              {editingId && loadingSelected ? (
+                <p className="text-xs text-muted-foreground">Actualizando datos del servicio...</p>
+              ) : null}
+              <ServicioForm
+                key={editingId || "new"}
+                servicio={selectedForForm}
+                onSuccess={() => {
+                  mutate()
+                  setEditingId(null)
+                  setSelected(null)
+                  setPage(1)
+                  setShowForm(false)
+                }}
+              />
+            </>
           )}
         </DialogContent>
       </Dialog>
