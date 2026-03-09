@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -47,13 +47,6 @@ type GiftcardsPageResponse = {
 
 const DEFAULT_GIFTCARD_TEMPLATE_SOURCE = "/templates/giftcard-template.pdf"
 
-const toObjectUrl = async (value: string, signal: AbortSignal) => {
-  const response = await fetch(value, { signal })
-  if (!response.ok) throw new Error("No se pudo convertir recurso inline a Blob")
-  const blob = await response.blob()
-  return URL.createObjectURL(blob)
-}
-
 export function GiftcardsPanel() {
   const [page, setPage] = useState(1)
   const { data: giftcardsResponse, mutate } = useSWR<GiftcardsPageResponse>(
@@ -86,99 +79,27 @@ export function GiftcardsPanel() {
   const [facturaOpen, setFacturaOpen] = useState(false)
   const [facturaInfo, setFacturaInfo] = useState<FacturaInfo | null>(null)
   const [facturaId, setFacturaId] = useState<string | null>(null)
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
-  const [giftcardTemplateSource, setGiftcardTemplateSource] = useState<string>(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
-  const logoObjectUrlRef = useRef<string | null>(null)
-  const templateObjectUrlRef = useRef<string | null>(null)
+  const { data: brandingLogo } = useSWR<{ data_url?: string | null }>(
+    showForm ? "/api/branding/logo" : null,
+    fetcher,
+  )
+  const { data: brandingTemplate } = useSWR<{ data_url?: string | null; public_url?: string | null }>(
+    showForm ? "/api/branding/giftcard-template" : null,
+    fetcher,
+  )
+  const logoDataUrl = useMemo(() => {
+    const raw = String(brandingLogo?.data_url || "").trim()
+    if (!raw) return null
+    return raw
+  }, [brandingLogo])
+  const giftcardTemplateSource = useMemo(() => {
+    const inline = String(brandingTemplate?.data_url || "").trim()
+    if (inline) return inline
+    const publicUrl = String(brandingTemplate?.public_url || "").trim()
+    return publicUrl || DEFAULT_GIFTCARD_TEMPLATE_SOURCE
+  }, [brandingTemplate])
 
   const serviciosMap = useMemo(() => new Map(servicios.map((s) => [s.id, s])), [servicios])
-
-  useEffect(() => {
-    if (!showForm) {
-      setLogoDataUrl(null)
-      setGiftcardTemplateSource(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
-      if (logoObjectUrlRef.current) {
-        URL.revokeObjectURL(logoObjectUrlRef.current)
-        logoObjectUrlRef.current = null
-      }
-      if (templateObjectUrlRef.current) {
-        URL.revokeObjectURL(templateObjectUrlRef.current)
-        templateObjectUrlRef.current = null
-      }
-      return
-    }
-
-    const controller = new AbortController()
-    let active = true
-
-    const loadBranding = async () => {
-      try {
-        const res = await fetch("/api/branding/logo", { signal: controller.signal, cache: "no-store" })
-        if (!res.ok) throw new Error("No se pudo cargar logo de branding")
-        const payload = (await res.json()) as { data_url?: string | null }
-        const raw = String(payload?.data_url || "").trim()
-        if (!raw) {
-          if (active) setLogoDataUrl(null)
-          return
-        }
-        if (raw.startsWith("data:image/")) {
-          const objectUrl = await toObjectUrl(raw, controller.signal)
-          if (!active) {
-            URL.revokeObjectURL(objectUrl)
-            return
-          }
-          if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current)
-          logoObjectUrlRef.current = objectUrl
-          setLogoDataUrl(objectUrl)
-          return
-        }
-        if (active) setLogoDataUrl(raw)
-      } catch {
-        if (active) setLogoDataUrl(null)
-      }
-    }
-
-    const loadTemplate = async () => {
-      try {
-        const res = await fetch("/api/branding/giftcard-template", {
-          signal: controller.signal,
-          cache: "no-store",
-        })
-        if (!res.ok) throw new Error("No se pudo cargar plantilla de giftcard")
-        const payload = (await res.json()) as { data_url?: string | null; public_url?: string | null }
-        const inline = String(payload?.data_url || "").trim()
-        const fallback = String(payload?.public_url || "").trim() || DEFAULT_GIFTCARD_TEMPLATE_SOURCE
-
-        if (!inline) {
-          if (active) setGiftcardTemplateSource(fallback)
-          return
-        }
-
-        if (inline.startsWith("data:")) {
-          const objectUrl = await toObjectUrl(inline, controller.signal)
-          if (!active) {
-            URL.revokeObjectURL(objectUrl)
-            return
-          }
-          if (templateObjectUrlRef.current) URL.revokeObjectURL(templateObjectUrlRef.current)
-          templateObjectUrlRef.current = objectUrl
-          setGiftcardTemplateSource(objectUrl)
-          return
-        }
-
-        if (active) setGiftcardTemplateSource(inline)
-      } catch {
-        if (active) setGiftcardTemplateSource(DEFAULT_GIFTCARD_TEMPLATE_SOURCE)
-      }
-    }
-
-    void Promise.all([loadBranding(), loadTemplate()])
-
-    return () => {
-      active = false
-      controller.abort()
-    }
-  }, [showForm])
 
   const filtered = giftcards.filter((g) => {
     const term = search.toLowerCase()
