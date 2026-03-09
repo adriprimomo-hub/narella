@@ -117,8 +117,21 @@ export function ServiciosList() {
     mutate()
   }
 
-  const cloneServicio = (servicio: Servicio): Servicio => ({
-    ...servicio,
+  const cloneServicio = (servicio: Partial<Servicio>): Servicio => ({
+    id: String(servicio.id || ""),
+    nombre: String(servicio.nombre || ""),
+    precio_lista: Number((servicio as any).precio_lista ?? (servicio as any).precio ?? 0),
+    precio_descuento:
+      servicio.precio_descuento === null || servicio.precio_descuento === undefined
+        ? null
+        : Number(servicio.precio_descuento),
+    duracion_minutos: Number(servicio.duracion_minutos || 0),
+    activo: servicio.activo !== false,
+    categoria_id: servicio.categoria_id || null,
+    recurso_id: servicio.recurso_id || null,
+    declaracion_jurada_plantilla_id: servicio.declaracion_jurada_plantilla_id || null,
+    comision_pct: servicio.comision_pct ?? null,
+    comision_monto_fijo: servicio.comision_monto_fijo ?? null,
     empleadas_habilitadas: Array.isArray(servicio.empleadas_habilitadas) ? [...servicio.empleadas_habilitadas] : [],
     empleadas_comision: Array.isArray(servicio.empleadas_comision)
       ? servicio.empleadas_comision.map((c) => ({ ...c }))
@@ -141,6 +154,9 @@ export function ServiciosList() {
         throw new Error("No se pudo cargar el servicio.")
       }
       const payload = await res.json()
+      if (!payload || typeof payload !== "object" || !payload.id || !payload.nombre) {
+        throw new Error("Respuesta inválida al cargar servicio")
+      }
       if (editRequestRef.current !== requestId) return
       setSelected(cloneServicio(payload))
     } catch {

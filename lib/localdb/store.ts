@@ -184,6 +184,8 @@ const horarioLocal: HorarioLocal[] = [
 
 const categoriaCorteId = "categoria-corte"
 const categoriaTratamientoId = "categoria-tratamiento"
+const tipoProfesionalEstilistaId = "tipo-profesional-estilista"
+const tipoProfesionalColoristaId = "tipo-profesional-colorista"
 
 const servicioCorteId = "servicio-corte"
 const servicioColorId = "servicio-color"
@@ -216,6 +218,22 @@ export const db: any = {
       id: categoriaTratamientoId,
       usuario_id: LOCAL_USER_ID,
       nombre: "Tratamientos",
+      created_at: nowIso,
+      updated_at: nowIso,
+    },
+  ],
+  tipos_profesionales: [
+    {
+      id: tipoProfesionalEstilistaId,
+      usuario_id: LOCAL_USER_ID,
+      nombre: "Estilista",
+      created_at: nowIso,
+      updated_at: nowIso,
+    },
+    {
+      id: tipoProfesionalColoristaId,
+      usuario_id: LOCAL_USER_ID,
+      nombre: "Colorista",
       created_at: nowIso,
       updated_at: nowIso,
     },
@@ -292,6 +310,7 @@ export const db: any = {
       apellido: "Lopez",
       telefono: "1122334455",
       alias_transferencia: "ana.lopez.mp",
+      tipo_profesional_id: tipoProfesionalEstilistaId,
       activo: true,
       horarios: [
         { dia: 1, desde: "09:00", hasta: "17:00" },
@@ -310,6 +329,7 @@ export const db: any = {
       apellido: "Gomez",
       telefono: "1100112233",
       alias_transferencia: "belen.gomez.mp",
+      tipo_profesional_id: tipoProfesionalColoristaId,
       activo: true,
       horarios: [
         { dia: 2, desde: "10:00", hasta: "18:00" },
@@ -620,6 +640,39 @@ const normalizeEmpleadasAliasTransferencia = () => {
 }
 
 normalizeEmpleadasAliasTransferencia()
+
+const ensureTiposProfesionalesTable = () => {
+  if (!("tipos_profesionales" in db) || !Array.isArray((db as any).tipos_profesionales)) {
+    ;(db as any).tipos_profesionales = []
+    persistLocalDb(db as any)
+  }
+}
+
+ensureTiposProfesionalesTable()
+
+const normalizeEmpleadasTipoProfesional = () => {
+  if (!Array.isArray(db.empleadas) || db.empleadas.length === 0) return
+  let changed = false
+  const tiposIds = new Set(
+    Array.isArray((db as any).tipos_profesionales) ? (db as any).tipos_profesionales.map((tipo: any) => tipo.id) : [],
+  )
+  db.empleadas.forEach((empleada: any) => {
+    if (!("tipo_profesional_id" in empleada)) {
+      empleada.tipo_profesional_id = null
+      changed = true
+      return
+    }
+    if (empleada.tipo_profesional_id && !tiposIds.has(empleada.tipo_profesional_id)) {
+      empleada.tipo_profesional_id = null
+      changed = true
+    }
+  })
+  if (changed) {
+    persistLocalDb(db as any)
+  }
+}
+
+normalizeEmpleadasTipoProfesional()
 
 const ensureGiftcardsTable = () => {
   if (!("giftcards" in db)) {

@@ -15,6 +15,7 @@ const empleadaSchema = z.object({
   apellido: z.string().trim().optional(),
   telefono: z.string().trim().optional(),
   alias_transferencia: z.string().trim().optional(),
+  tipo_profesional_id: z.string().trim().optional().nullable(),
   horarios: z.array(horarioSchema).optional(),
   activo: z.boolean().optional(),
 })
@@ -26,6 +27,11 @@ const isMissingColumnError = (error: any, column: string) => {
   if (!col) return false
   if (code === "42703" || code === "PGRST204") return message.includes(col)
   return message.includes("column") && message.includes(col)
+}
+
+const isMissingTableError = (error: any) => {
+  const code = String(error?.code || "")
+  return code === "42P01" || code === "PGRST205"
 }
 
 export async function GET(request: Request) {
@@ -79,19 +85,47 @@ export async function POST(request: Request) {
 
   const telefono = payload.telefono?.trim() || null
   const aliasTransferencia = payload.alias_transferencia?.trim() || null
+  let tipoProfesionalId = payload.tipo_profesional_id?.trim() || null
+  if (tipoProfesionalId) {
+    const { data: tipoProfesional, error: tipoError } = await db
+      .from("tipos_profesionales")
+      .select("id")
+      .eq("id", tipoProfesionalId)
+      .eq("usuario_id", user.id)
+      .maybeSingle()
+    if (tipoError && !isMissingTableError(tipoError)) {
+      return NextResponse.json({ error: tipoError.message }, { status: 500 })
+    }
+    if (!tipoError && !tipoProfesional) {
+      return NextResponse.json({ error: "El tipo profesional seleccionado no existe." }, { status: 404 })
+    }
+    if (tipoError && isMissingTableError(tipoError)) {
+      tipoProfesionalId = null
+    }
+  }
   const insertPayload = {
     usuario_id: user.id,
     nombre: payload.nombre,
     apellido: payload.apellido ?? "",
     telefono,
     alias_transferencia: aliasTransferencia,
+    tipo_profesional_id: tipoProfesionalId,
     horarios,
     activo: payload.activo ?? true,
   }
 
   let { data, error } = await db.from("empleadas").insert([insertPayload]).select("*").single()
-  if (error && isMissingColumnError(error, "alias_transferencia")) {
-    const { alias_transferencia: _alias, ...legacyPayload } = insertPayload
+  if (
+    error &&
+    (isMissingColumnError(error, "alias_transferencia") || isMissingColumnError(error, "tipo_profesional_id"))
+  ) {
+    const legacyPayload: any = { ...insertPayload }
+    if (isMissingColumnError(error, "alias_transferencia")) {
+      delete legacyPayload.alias_transferencia
+    }
+    if (isMissingColumnError(error, "tipo_profesional_id")) {
+      delete legacyPayload.tipo_profesional_id
+    }
     ;({ data, error } = await db.from("empleadas").insert([legacyPayload]).select("*").single())
   }
 

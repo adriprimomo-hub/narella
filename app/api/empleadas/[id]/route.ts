@@ -17,6 +17,7 @@ const empleadaUpdateSchema = z
     apellido: z.string().trim().optional(),
     telefono: z.string().trim().optional(),
     alias_transferencia: z.string().trim().optional(),
+    tipo_profesional_id: z.string().trim().optional().nullable(),
     horarios: z.array(horarioSchema).optional(),
     activo: z.boolean().optional(),
   })
@@ -31,6 +32,11 @@ const isMissingColumnError = (error: any, column: string) => {
   if (!col) return false
   if (code === "42703" || code === "PGRST204") return message.includes(col)
   return message.includes("column") && message.includes(col)
+}
+
+const isMissingTableError = (error: any) => {
+  const code = String(error?.code || "")
+  return code === "42P01" || code === "PGRST205"
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +60,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (payload.alias_transferencia !== undefined) {
     updatePayload.alias_transferencia = payload.alias_transferencia?.trim() || null
   }
+  if (payload.tipo_profesional_id !== undefined) {
+    const tipoProfesionalId = payload.tipo_profesional_id?.trim() || null
+    if (tipoProfesionalId) {
+      const { data: tipoProfesional, error: tipoError } = await db
+        .from("tipos_profesionales")
+        .select("id")
+        .eq("id", tipoProfesionalId)
+        .eq("usuario_id", user.id)
+        .maybeSingle()
+      if (tipoError && !isMissingTableError(tipoError)) {
+        return NextResponse.json({ error: tipoError.message }, { status: 500 })
+      }
+      if (!tipoError && !tipoProfesional) {
+        return NextResponse.json({ error: "El tipo profesional seleccionado no existe." }, { status: 404 })
+      }
+      if (tipoError && isMissingTableError(tipoError)) {
+        updatePayload.tipo_profesional_id = null
+      } else {
+        updatePayload.tipo_profesional_id = tipoProfesionalId
+      }
+    } else {
+      updatePayload.tipo_profesional_id = null
+    }
+  }
   if (payload.horarios !== undefined) updatePayload.horarios = horarios
   if (payload.activo !== undefined) updatePayload.activo = payload.activo
 
@@ -65,8 +95,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     .select("*")
     .single()
 
-  if (error && isMissingColumnError(error, "alias_transferencia")) {
-    const { alias_transferencia: _alias, ...legacyPayload } = updatePayload
+  if (
+    error &&
+    (isMissingColumnError(error, "alias_transferencia") || isMissingColumnError(error, "tipo_profesional_id"))
+  ) {
+    const legacyPayload: any = { ...updatePayload }
+    if (isMissingColumnError(error, "alias_transferencia")) {
+      delete legacyPayload.alias_transferencia
+    }
+    if (isMissingColumnError(error, "tipo_profesional_id")) {
+      delete legacyPayload.tipo_profesional_id
+    }
     ;({ data, error } = await db
       .from("empleadas")
       .update(legacyPayload)

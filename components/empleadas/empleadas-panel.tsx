@@ -8,11 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Empleada, HorarioLaboral } from "./types"
-import { CalendarIcon, CalendarOffIcon, CheckIcon, Loader2Icon, PencilIcon, PlusIcon, Trash2Icon, SearchIcon } from "lucide-react"
+import {
+  CalendarIcon,
+  CalendarOffIcon,
+  CheckIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  SearchIcon,
+  SettingsIcon,
+  Trash2Icon,
+} from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatDate } from "@/lib/date-format"
 import { showSystemConfirm } from "@/lib/system-dialogs"
+import { TipoProfesional, TiposProfesionalesManager } from "./tipos-profesionales-manager"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 const EMPLEADAS_PAGE_SIZE = 60
@@ -32,6 +43,7 @@ type FormState = {
   apellido: string
   telefono: string
   alias_transferencia: string
+  tipo_profesional_id: string
   horarios: (HorarioLaboral & { activo: boolean })[]
   activo: boolean
 }
@@ -67,6 +79,7 @@ function buildInitialState(empleada?: Empleada | null): FormState {
     apellido: empleada?.apellido || "",
     telefono: empleada?.telefono || "",
     alias_transferencia: empleada?.alias_transferencia || "",
+    tipo_profesional_id: empleada?.tipo_profesional_id || "",
     horarios: defaultHorarios.map((h) => {
       const existing = (empleada?.horarios || []).find((eh) => eh.dia === h.dia)
       return existing
@@ -79,16 +92,27 @@ function buildInitialState(empleada?: Empleada | null): FormState {
 
 interface EmpleadaFormProps {
   empleada?: Empleada | null
+  tiposProfesionales: TipoProfesional[]
+  onManageTipos: () => void
+  canManageTipos?: boolean
   onSuccess: () => void
   onCancel?: () => void
 }
 
-function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
+function EmpleadaForm({
+  empleada,
+  tiposProfesionales,
+  onManageTipos,
+  canManageTipos = false,
+  onSuccess,
+  onCancel,
+}: EmpleadaFormProps) {
   const formId = useId()
   const nombreId = `${formId}-nombre`
   const apellidoId = `${formId}-apellido`
   const telefonoId = `${formId}-telefono`
   const aliasTransferenciaId = `${formId}-alias-transferencia`
+  const tipoProfesionalId = `${formId}-tipo-profesional`
   const [formData, setFormData] = useState<FormState>(() => buildInitialState(empleada))
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState("")
@@ -121,6 +145,7 @@ function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
 
     const payload = {
       ...formData,
+      tipo_profesional_id: formData.tipo_profesional_id || null,
       horarios: formData.horarios.filter((h) => h.activo).map(({ activo, ...rest }) => rest),
     }
 
@@ -213,6 +238,40 @@ function EmpleadaForm({ empleada, onSuccess, onCancel }: EmpleadaFormProps) {
             onChange={(e) => setFormData({ ...formData, alias_transferencia: e.target.value })}
             placeholder="alias.cuenta"
           />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label htmlFor={tipoProfesionalId} className="text-sm font-medium">
+              Tipo profesional
+            </label>
+            {canManageTipos ? (
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onManageTipos}>
+                <SettingsIcon className="mr-1 h-3 w-3" />
+                Gestionar
+              </Button>
+            ) : null}
+          </div>
+          <Select
+            value={formData.tipo_profesional_id || "none"}
+            onValueChange={(value) =>
+              setFormData({
+                ...formData,
+                tipo_profesional_id: value === "none" ? "" : value,
+              })
+            }
+          >
+            <SelectTrigger id={tipoProfesionalId}>
+              <SelectValue placeholder="Sin tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin tipo</SelectItem>
+              {tiposProfesionales.map((tipo) => (
+                <SelectItem key={tipo.id} value={tipo.id}>
+                  {tipo.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -313,9 +372,14 @@ export function EmpleadasPanel() {
     `/api/empleadas?include_inactive=true&page=${page}&page_size=${EMPLEADAS_PAGE_SIZE}`,
     fetcher,
   )
+  const { data: tiposProfesionalesData, mutate: mutateTiposProfesionales } = useSWR<TipoProfesional[]>(
+    "/api/tipos-profesionales",
+    fetcher,
+  )
   const { data: config } = useSWR<{ rol?: string }>("/api/config", fetcher)
   const isAdmin = config?.rol === "admin"
   const [showForm, setShowForm] = useState(false)
+  const [showTiposProfesionalesManager, setShowTiposProfesionalesManager] = useState(false)
   const [selected, setSelected] = useState<Empleada | null>(null)
   const [search, setSearch] = useState("")
   const [showAusenciasDialog, setShowAusenciasDialog] = useState(false)
@@ -332,6 +396,11 @@ export function EmpleadasPanel() {
     hora_hasta?: string
   }>({})
   const empleadas = Array.isArray(empleadasResponse?.items) ? empleadasResponse.items : []
+  const tiposProfesionales = Array.isArray(tiposProfesionalesData) ? tiposProfesionalesData : []
+  const tiposProfesionalesMap = useMemo(
+    () => new Map(tiposProfesionales.map((tipo) => [tipo.id, tipo.nombre])),
+    [tiposProfesionales],
+  )
   const pagination = empleadasResponse?.pagination || {
     page,
     page_size: EMPLEADAS_PAGE_SIZE,
@@ -485,6 +554,7 @@ export function EmpleadasPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>Tipo profesional</TableHead>
                   <TableHead>Horario</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -506,6 +576,9 @@ export function EmpleadasPanel() {
                       {e.alias_transferencia ? (
                         <p className="text-xs text-muted-foreground">Alias: {e.alias_transferencia}</p>
                       ) : null}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {e.tipo_profesional_id ? tiposProfesionalesMap.get(e.tipo_profesional_id) || "No definido" : "Sin tipo"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{horariosResumidos[e.id] || "Sin horario"}</TableCell>
                     <TableCell>
@@ -549,7 +622,7 @@ export function EmpleadasPanel() {
                 ))}
                 {empleadas.filter((e) => `${e.nombre} ${e.apellido}`.toLowerCase().includes(search.toLowerCase())).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={5} className="text-sm text-muted-foreground">
                       Sin empleadas para esta página.
                     </TableCell>
                   </TableRow>
@@ -602,6 +675,9 @@ export function EmpleadasPanel() {
           <EmpleadaForm
             key={selected?.id || "new"}
             empleada={selected}
+            tiposProfesionales={tiposProfesionales}
+            onManageTipos={() => setShowTiposProfesionalesManager(true)}
+            canManageTipos={isAdmin}
             onCancel={() => {
               setSelected(null)
               setShowForm(false)
@@ -823,6 +899,25 @@ export function EmpleadasPanel() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showTiposProfesionalesManager}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowTiposProfesionalesManager(false)
+            mutateTiposProfesionales()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <TiposProfesionalesManager
+            onClose={() => {
+              setShowTiposProfesionalesManager(false)
+              mutateTiposProfesionales()
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

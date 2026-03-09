@@ -19,6 +19,18 @@ type EmpleadaComision = {
   comision_monto_fijo: number | ""
 }
 
+type EmpleadaDisponible = {
+  id: string
+  nombre: string
+  apellido?: string | null
+  tipo_profesional_id?: string | null
+}
+
+type TipoProfesional = {
+  id: string
+  nombre: string
+}
+
 const resolveComisionTipo = (pct?: number | null, fijo?: number | null): ComisionTipo => {
   const pctValue = Number(pct ?? 0)
   const fijoValue = Number(fijo ?? 0)
@@ -62,14 +74,17 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
   const [comisionTipoBase, setComisionTipoBase] = useState<ComisionTipo>("porcentaje")
   const [empleadasComision, setEmpleadasComision] = useState<EmpleadaComision[]>([])
   const [searchEmpleada, setSearchEmpleada] = useState("")
+  const [tipoProfesionalMasivo, setTipoProfesionalMasivo] = useState("all")
   const [errors, setErrors] = useState<{ nombre?: string; precio_lista?: string; duracion_minutos?: string }>({})
   const [formError, setFormError] = useState("")
-  const { data: empleadasData } = useSWR<{ id: string; nombre: string }[]>("/api/empleadas", fetcher)
+  const { data: empleadasData } = useSWR<EmpleadaDisponible[]>("/api/empleadas", fetcher)
+  const { data: tiposProfesionalesData } = useSWR<TipoProfesional[]>("/api/tipos-profesionales", fetcher)
   const { data: categoriasData, mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   const { data: recursosData, mutate: mutateRecursos } = useSWR<Recurso[]>("/api/recursos", fetcher)
   const { data: declaracionesData } = useSWR<DeclaracionPlantilla[]>("/api/declaraciones-juradas/plantillas", fetcher)
 
   const empleadas = Array.isArray(empleadasData) ? empleadasData : []
+  const tiposProfesionales = Array.isArray(tiposProfesionalesData) ? tiposProfesionalesData : []
   const categorias = Array.isArray(categoriasData) ? categoriasData : []
   const recursos = Array.isArray(recursosData) ? recursosData : []
   const declaraciones = Array.isArray(declaracionesData) ? declaracionesData : []
@@ -102,6 +117,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
           comision_tipo: resolveComisionTipo(c.comision_pct, c.comision_monto_fijo),
         })),
       )
+      setTipoProfesionalMasivo("all")
     } else {
       setFormData({
         nombre: "",
@@ -118,6 +134,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
       })
       setComisionTipoBase("porcentaje")
       setEmpleadasComision([])
+      setTipoProfesionalMasivo("all")
     }
   }, [servicio])
 
@@ -195,15 +212,31 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
 
   const toggleEmpleada = (id: string) => {
     const isSelected = formData.empleadas_habilitadas.includes(id)
+    const nextIds = isSelected
+      ? formData.empleadas_habilitadas.filter((e) => e !== id)
+      : [...formData.empleadas_habilitadas, id]
     setFormData((prev) => ({
       ...prev,
-      empleadas_habilitadas: isSelected
-        ? prev.empleadas_habilitadas.filter((e) => e !== id)
-        : [...prev.empleadas_habilitadas, id],
+      empleadas_habilitadas: nextIds,
     }))
     if (isSelected) {
       setEmpleadasComision((prev) => prev.filter((c) => c.empleada_id !== id))
     }
+  }
+
+  const asignarTodasPorTipo = () => {
+    const nextSelected =
+      tipoProfesionalMasivo === "all"
+        ? empleadas
+        : tipoProfesionalMasivo === "none"
+          ? empleadas.filter((e) => !e.tipo_profesional_id)
+          : empleadas.filter((e) => e.tipo_profesional_id === tipoProfesionalMasivo)
+    const nextIds = nextSelected.map((e) => e.id)
+    setFormData((prev) => ({
+      ...prev,
+      empleadas_habilitadas: nextIds,
+    }))
+    setEmpleadasComision((prev) => prev.filter((c) => nextIds.includes(c.empleada_id)))
   }
 
   const updateComisionTipo = (empleada_id: string, tipo: ComisionTipo) => {
@@ -229,7 +262,9 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
   }
 
   const empleadasFiltradas = searchEmpleada
-    ? empleadas.filter((e) => e.nombre.toLowerCase().includes(searchEmpleada.toLowerCase()))
+    ? empleadas.filter((e) =>
+        `${e.nombre} ${e.apellido || ""}`.toLowerCase().includes(searchEmpleada.toLowerCase()),
+      )
     : []
   const empleadasSeleccionadas = empleadas.filter((e) => formData.empleadas_habilitadas.includes(e.id))
 
@@ -434,18 +469,42 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
       <div className="space-y-3 rounded-lg border p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">Quien lo puede hacer y comision</p>
-          <div className="w-60">
-            <label htmlFor="servicio-buscar-empleada" className="mb-1 block text-sm font-medium">
-              Buscar empleada
-            </label>
-            <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="servicio-buscar-empleada"
-                className="pl-9"
-                value={searchEmpleada}
-                onChange={(e) => setSearchEmpleada(e.target.value)}
-              />
+          <div className="flex flex-wrap items-end justify-end gap-2">
+            <div className="w-40">
+              <label htmlFor="servicio-tipo-profesional-masivo" className="mb-1 block text-sm font-medium">
+                Todas
+              </label>
+              <Select value={tipoProfesionalMasivo} onValueChange={setTipoProfesionalMasivo}>
+                <SelectTrigger id="servicio-tipo-profesional-masivo" className="h-10">
+                  <SelectValue placeholder="Todos los tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los tipos</SelectItem>
+                  <SelectItem value="none">Sin tipo</SelectItem>
+                  {tiposProfesionales.map((tipo) => (
+                    <SelectItem key={tipo.id} value={tipo.id}>
+                      {tipo.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="button" variant="outline" onClick={asignarTodasPorTipo}>
+              Asignar
+            </Button>
+            <div className="w-60">
+              <label htmlFor="servicio-buscar-empleada" className="mb-1 block text-sm font-medium">
+                Buscar empleada
+              </label>
+              <div className="relative">
+                <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="servicio-buscar-empleada"
+                  className="pl-9"
+                  value={searchEmpleada}
+                  onChange={(e) => setSearchEmpleada(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -455,7 +514,10 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             {empleadasFiltradas.length ? (
               empleadasFiltradas.map((e) => (
                 <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span>{e.nombre}</span>
+                  <span>
+                    {e.nombre}
+                    {e.apellido ? ` ${e.apellido}` : ""}
+                  </span>
                   <Button
                     type="button"
                     variant={formData.empleadas_habilitadas.includes(e.id) ? "secondary" : "default"}
@@ -480,7 +542,10 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             return (
               <div key={e.id} className="rounded-lg border p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{e.nombre}</p>
+                  <p className="text-sm font-medium">
+                    {e.nombre}
+                    {e.apellido ? ` ${e.apellido}` : ""}
+                  </p>
                   <Button type="button" variant="ghost" size="sm" onClick={() => toggleEmpleada(e.id)}>
                     Quitar
                   </Button>
