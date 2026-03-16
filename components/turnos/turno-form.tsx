@@ -71,6 +71,13 @@ const formatForInput = (dateString: string) => {
   return local.toISOString().slice(0, 16)
 }
 
+const DATETIME_LOCAL_VALUE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+
+const normalizeDateTimeLocalValue = (value?: string | null) => {
+  if (!value) return ""
+  return DATETIME_LOCAL_VALUE.test(value) ? value : formatForInput(value)
+}
+
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 interface TurnoFormProps {
@@ -105,7 +112,7 @@ export function TurnoForm({
   const [formData, setFormData] = useState({
     cliente_id: turno?.cliente_id || "",
     servicio_id: turno?.servicio_id || "",
-    fecha_inicio: turno ? formatForInput(turno.fecha_inicio) : initialFecha ? formatForInput(initialFecha) : "",
+    fecha_inicio: turno ? formatForInput(turno.fecha_inicio) : normalizeDateTimeLocalValue(initialFecha),
     duracion_minutos: turno?.duracion_minutos ?? "",
     observaciones: turno?.observaciones || "",
     empleada_id: turno?.empleada_id || initialEmpleadaId || "",
@@ -262,7 +269,7 @@ export function TurnoForm({
       setSimultaneos([])
     } else {
       setFormData((prev) => {
-        const nextFecha = initialFecha ? formatForInput(initialFecha) : prev.fecha_inicio
+        const nextFecha = initialFecha ? normalizeDateTimeLocalValue(initialFecha) : prev.fecha_inicio
         const nextEmpleada = initialEmpleadaId || prev.empleada_id
         if (prev.fecha_inicio === nextFecha && prev.empleada_id === nextEmpleada) return prev
         return {

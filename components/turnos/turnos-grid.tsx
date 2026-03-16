@@ -819,8 +819,9 @@ const slots = useMemo(() => {
                           <button
                             key={`grid-${col.id}-${slotMinutes}`}
                             type="button"
-                            className="relative w-full text-left transition hover:bg-accent/50"
+                            className="absolute left-0 right-0 block w-full text-left transition hover:bg-accent/50"
                             style={{
+                              top: `${idx * SLOT_HEIGHT}px`,
                               height: `${SLOT_HEIGHT}px`,
                               boxShadow: idx % 2 === 1
                                 ? "inset 0 -2px 0 0 rgba(0,0,0,0.15)"
