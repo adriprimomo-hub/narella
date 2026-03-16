@@ -10,7 +10,12 @@ import {
   parseDataUrl,
   uploadTurnoWorkPhotoToStorage,
 } from "@/lib/supabase/storage"
-import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import {
+  isWithinClosedTurnoEditWindow,
+  isWithinPastSchedulingWindow,
+  MAX_CLOSED_TURNO_EDIT_HOURS,
+  MAX_TURNO_PAST_SCHEDULE_HOURS,
+} from "@/lib/turnos/scheduling"
 import { resolveAppUrl } from "@/lib/url"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
 import { renderMessageTemplate, resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
@@ -473,7 +478,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const tenantId = getTenantId(user)
   const role = await getUserRole(db, user.id)
-  if (!isAdminRole(role) && !isStaffRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const isAdmin = isAdminRole(role)
+  const isStaff = isStaffRole(role)
+  if (!isAdmin && !isStaff) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { data: updates, response: validationResponse } = await validateBody(request, turnoUpdateSchema)
   if (validationResponse) return validationResponse
@@ -493,11 +500,26 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: currentError?.message || "Turno no encontrado" }, { status: 404 })
   }
 
-  if (currentTurno.estado === "completado") {
-    return NextResponse.json({ error: "No puedes modificar turnos cerrados" }, { status: 403 })
+  const isClosedTurno = currentTurno.estado === "completado" || Boolean(currentTurno.finalizado_en)
+  const canAdminEditClosedTurno =
+    isAdmin &&
+    isClosedTurno &&
+    isWithinClosedTurnoEditWindow(currentTurno.finalizado_en, currentTurno.fecha_fin || currentTurno.fecha_inicio)
+
+  if (isClosedTurno && !canAdminEditClosedTurno) {
+    if (isAdmin) {
+      return NextResponse.json(
+        { error: `Solo puedes modificar turnos cerrados hasta ${MAX_CLOSED_TURNO_EDIT_HOURS} horas después del cierre.` },
+        { status: 403 },
+      )
+    }
+    return NextResponse.json({ error: "Solo admin puede modificar turnos cerrados" }, { status: 403 })
   }
 
   if (forceDeclaracionJurada && !hasRequestedUpdates) {
+    if (isClosedTurno) {
+      return NextResponse.json({ error: "No puedes generar DJ en turnos cerrados" }, { status: 409 })
+    }
     if (isStaffRole(role)) {
       const empleadaIdStaff = await getEmpleadaIdForUser(db, user.id)
       if (!empleadaIdStaff) return NextResponse.json({ error: "Staff sin empleada asignada" }, { status: 403 })
@@ -525,7 +547,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   // Staff: restricted update path
-  if (isStaffRole(role)) {
+  if (isStaff) {
     const empleadaIdStaff = await getEmpleadaIdForUser(db, user.id)
     if (!empleadaIdStaff) return NextResponse.json({ error: "Staff sin empleada asignada" }, { status: 403 })
 
@@ -703,7 +725,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const isReschedule =
     updates.fecha_inicio !== undefined &&
     (Number.isNaN(currentFechaInicioMs) || Math.abs(fechaInicioDate.getTime() - currentFechaInicioMs) > 60000)
-  if (isReschedule && !isWithinPastSchedulingWindow(fechaInicioDate)) {
+  if (isReschedule && !isWithinPastSchedulingWindow(fechaInicioDate) && !canAdminEditClosedTurno) {
     return NextResponse.json(
       { error: `No se pueden agendar turnos con más de ${MAX_TURNO_PAST_SCHEDULE_HOURS} horas en el pasado.` },
       { status: 409 },

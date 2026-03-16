@@ -25,7 +25,11 @@ import type { Empleada } from "../empleadas/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { AlertTriangleIcon, CalendarPlusIcon, Loader2Icon, PlusIcon, SaveIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react"
-import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import {
+  isWithinClosedTurnoEditWindow,
+  isWithinPastSchedulingWindow,
+  MAX_TURNO_PAST_SCHEDULE_HOURS,
+} from "@/lib/turnos/scheduling"
 
 type Sena = {
   id: string
@@ -205,6 +209,10 @@ export function TurnoForm({
     : serviciosDisponibles
   const selectedServicio = serviciosPrincipales.find((s) => s.id === formData.servicio_id)
   const isEditing = Boolean(turno)
+  const isClosedTurno = Boolean(turno && (turno.estado === "completado" || turno.finalizado_en))
+  const canEditClosedTurno = Boolean(
+    turno && isClosedTurno && isWithinClosedTurnoEditWindow(turno.finalizado_en, turno.fecha_fin || turno.fecha_inicio),
+  )
   const isFutureTurno = turno ? new Date(turno.fecha_inicio).getTime() > Date.now() : true
   const empleadasFiltradas = empleadas.filter((e) =>
     `${e.nombre} ${e.apellido || ""}`.toLowerCase().includes(empleadaQuery.toLowerCase()),
@@ -625,7 +633,7 @@ export function TurnoForm({
       setFieldErrors((prev) => ({ ...prev, fecha_inicio: "Selecciona una fecha y hora válidas." }))
       return
     }
-    if (!isWithinPastSchedulingWindow(startDate)) {
+    if (!canEditClosedTurno && !isWithinPastSchedulingWindow(startDate)) {
       setLoading(false)
       setFieldErrors((prev) => ({
         ...prev,

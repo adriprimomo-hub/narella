@@ -25,6 +25,7 @@ import {
   PlusIcon,
 } from "lucide-react"
 import { formatDate } from "@/lib/date-format"
+import { isWithinClosedTurnoEditWindow, MAX_CLOSED_TURNO_EDIT_HOURS } from "@/lib/turnos/scheduling"
 
 interface TurnoCardProps {
   turno: Turno
@@ -37,6 +38,7 @@ interface TurnoCardProps {
   servicios: Servicio[]
   empleadas: Empleada[]
   canDelete?: boolean
+  canEditCompleted?: boolean
 }
 
 type DeclaracionInicioPayload = {
@@ -68,6 +70,7 @@ export function TurnoCard({
   servicios,
   empleadas,
   canDelete = true,
+  canEditCompleted = false,
 }: TurnoCardProps) {
   const [loading, setLoading] = useState(false)
   const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(false)
@@ -85,6 +88,10 @@ export function TurnoCard({
   const isCanceledByClient = turno.confirmacion_estado === "cancelado"
   const isCanceled = turno.estado === "cancelado" || isCanceledByClient
   const isClosed = turno.estado === "completado" || Boolean(turno.finalizado_en)
+  const closedEditAllowed =
+    canEditCompleted &&
+    isClosed &&
+    isWithinClosedTurnoEditWindow(turno.finalizado_en, turno.fecha_fin || turno.fecha_inicio)
   const confirmState = isCanceled ? "cancelado" : turno.confirmacion_estado || "no_enviada"
   const startTooEarly = turno.estado === "pendiente" && !isCanceled && timeUntilStartMs > 60 * 60 * 1000
   const confirmWasSent =
@@ -94,7 +101,13 @@ export function TurnoCard({
     !!turno.confirmacion_enviada_at
   const canManageConfirmation =
     turno.estado === "pendiente" && isFutureTurno && confirmState !== "confirmado" && !isCanceled
-  const editDisabledReason = isClosed ? "Turno cerrado" : isCanceled ? "Turno cancelado" : undefined
+  const editDisabledReason = isCanceled
+    ? "Turno cancelado"
+    : isClosed && !closedEditAllowed
+      ? canEditCompleted
+        ? `Ventana de edición vencida (${MAX_CLOSED_TURNO_EDIT_HOURS}h)`
+        : "Turno cerrado"
+      : undefined
   const canEdit = !editDisabledReason
 
   const handleStatusChange = async (newStatus: string) => {
@@ -231,7 +244,11 @@ export function TurnoCard({
     }
     const deltaMs = nextStart.getTime() - baseStart.getTime()
     const turnosMovibles = grupoTurnos.filter(
-      (item) => item.estado !== "completado" && item.estado !== "cancelado" && item.confirmacion_estado !== "cancelado",
+      (item) =>
+        item.estado !== "cancelado" &&
+        item.confirmacion_estado !== "cancelado" &&
+        (item.estado !== "completado" ||
+          (canEditCompleted && isWithinClosedTurnoEditWindow(item.finalizado_en, item.fecha_fin || item.fecha_inicio))),
     )
     if (turnosMovibles.length === 0) {
       alert("No hay turnos del grupo disponibles para mover.")

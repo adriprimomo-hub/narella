@@ -1005,6 +1005,7 @@ const slots = useMemo(() => {
                   servicios={servicios || []}
                   empleadas={empleadas || []}
                   canDelete={isAdmin}
+                  canEditCompleted={isAdmin}
                 />
               </div>
             </div>
