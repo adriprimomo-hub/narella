@@ -402,11 +402,6 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             }}
             required
           />
-          {formData.precio_descuento !== null ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Se calcula automáticamente desde el precio con descuento y se redondea al centenar.
-            </p>
-          ) : null}
           {errors.precio_lista && <p className="text-xs text-destructive mt-1">{errors.precio_lista}</p>}
         </div>
         <div>

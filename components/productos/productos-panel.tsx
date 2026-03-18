@@ -638,11 +638,6 @@ export function ProductosPanel() {
                     if (prodErrors.precio_lista) setProdErrors((prev) => ({ ...prev, precio_lista: undefined }))
                   }}
                 />
-                {prod.precio_descuento !== "" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Se calcula automáticamente desde el precio descuento y se redondea al centenar.
-                  </p>
-                ) : null}
                 {prodErrors.precio_lista && <p className="text-xs text-destructive">{prodErrors.precio_lista}</p>}
               </div>
               <div className="space-y-1">
