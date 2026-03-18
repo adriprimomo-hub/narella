@@ -16,6 +16,7 @@ import {
   MAX_CLOSED_TURNO_EDIT_HOURS,
   MAX_TURNO_PAST_SCHEDULE_HOURS,
 } from "@/lib/turnos/scheduling"
+import { reconciliarEdicionRetroactivaTurnoCerrado } from "@/lib/turnos/retroactive-financials"
 import { resolveAppUrl } from "@/lib/url"
 import { sanitizePhoneNumber } from "@/lib/whatsapp"
 import { renderMessageTemplate, resolveTenantMensajeriaTemplates } from "@/lib/tenant-config"
@@ -915,6 +916,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const updatedTurno = data?.[0]
+  let reconciliacionRetroactiva: Record<string, unknown> | null = null
+  let reconciliacionRetroactivaError: string | null = null
+  if (canAdminEditClosedTurno && updatedTurno) {
+    try {
+      reconciliacionRetroactiva = await reconciliarEdicionRetroactivaTurnoCerrado({
+        db,
+        tenantId,
+        turnoAntes: currentTurno,
+        turnoDespues: updatedTurno,
+      })
+    } catch (retroactiveError) {
+      reconciliacionRetroactivaError =
+        retroactiveError instanceof Error
+          ? retroactiveError.message
+          : "No se pudo completar la reconciliación retroactiva del turno cerrado."
+      console.error("[turnos] retroactive closed-turno reconciliation failed", {
+        turnoId: id,
+        tenantId,
+        error: reconciliacionRetroactivaError,
+      })
+    }
+  }
   let declaracionPayloadResponse: Record<string, unknown> | null = null
   const estadoPrevio = String(currentTurno.estado || "")
   const estadoActual = String((updates as any).estado || currentTurno.estado || "")
@@ -931,6 +954,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json({
     ...updatedTurno,
     declaracion_jurada: declaracionPayloadResponse,
+    reconciliacion_retroactiva: reconciliacionRetroactiva,
+    reconciliacion_retroactiva_error: reconciliacionRetroactivaError,
   })
 }
 
