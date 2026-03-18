@@ -6,6 +6,7 @@ import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 const servicioSchema = z.object({
   nombre: z.string().trim().min(1),
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
     recurso_id,
     declaracion_jurada_plantilla_id,
   } = payload
+  const precioListaFinal = calcularPrecioListaDesdeDescuento(precio_descuento) ?? Number(precio_lista)
 
   const categoriaValue = await resolveCategoriaValue(db, tenantId, categoria_id)
 
@@ -177,8 +179,8 @@ export async function POST(request: Request) {
         usuario_id: tenantId,
         nombre,
         duracion_minutos,
-        precio: precio_lista,
-        precio_lista,
+        precio: precioListaFinal,
+        precio_lista: precioListaFinal,
         precio_descuento: precio_descuento ?? null,
         activo: true,
         empleadas_habilitadas: Array.isArray(empleadas_habilitadas) ? empleadas_habilitadas : [],

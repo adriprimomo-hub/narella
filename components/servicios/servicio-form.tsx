@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Servicio } from "./servicios-list"
 import { CategoriasManager, type Categoria } from "./categorias-manager"
 import { RecursosManager, type Recurso } from "./recursos-manager"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 type ComisionTipo = "porcentaje" | "monto"
 
@@ -391,6 +392,7 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             type="number"
             step="0.01"
             value={formData.precio_lista}
+            readOnly={formData.precio_descuento !== null}
             onChange={(e) => {
               setFormData({
                 ...formData,
@@ -400,6 +402,11 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             }}
             required
           />
+          {formData.precio_descuento !== null ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Se calcula automáticamente desde el precio con descuento y se redondea al centenar.
+            </p>
+          ) : null}
           {errors.precio_lista && <p className="text-xs text-destructive mt-1">{errors.precio_lista}</p>}
         </div>
         <div>
@@ -411,7 +418,16 @@ export function ServicioForm({ servicio, onSuccess }: ServicioFormProps) {
             type="number"
             step="0.01"
             value={formData.precio_descuento ?? ""}
-            onChange={(e) => setFormData({ ...formData, precio_descuento: e.target.value === "" ? null : Number.parseFloat(e.target.value) })}
+            onChange={(e) => {
+              const precioDescuento = e.target.value === "" ? null : Number.parseFloat(e.target.value)
+              const precioListaCalculado = calcularPrecioListaDesdeDescuento(precioDescuento)
+              setFormData((prev) => ({
+                ...prev,
+                precio_descuento: precioDescuento,
+                precio_lista: precioDescuento === null ? prev.precio_lista : (precioListaCalculado ?? prev.precio_lista),
+              }))
+              if (errors.precio_lista) setErrors((prev) => ({ ...prev, precio_lista: undefined }))
+            }}
           />
         </div>
         <div>

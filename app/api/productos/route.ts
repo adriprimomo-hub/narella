@@ -5,6 +5,7 @@ import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
 import { buildPaginationMeta, MEDIUM_LARGE_PAGE_SIZE, readPaginationParams } from "@/lib/api/pagination"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 const productoSchema = z.object({
   nombre: z.string().trim().min(1),
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
     empleadas_comision,
   } = payload
 
-  const precioListaFinal = Number(precio_lista)
+  const precioListaFinal = calcularPrecioListaDesdeDescuento(precio_descuento) ?? Number(precio_lista)
   if (!Number.isFinite(precioListaFinal) || precioListaFinal < 0) {
     return NextResponse.json({ error: "Precio de lista inválido" }, { status: 400 })
   }

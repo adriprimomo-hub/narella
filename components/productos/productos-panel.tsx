@@ -17,6 +17,7 @@ import { FacturaDialog, type FacturaInfo } from "@/components/facturacion/factur
 import { FacturandoDialog } from "@/components/facturacion/facturando-dialog"
 import { showSystemConfirm } from "@/lib/system-dialogs"
 import { normalizeRole } from "@/lib/roles"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 type ComisionTipo = "porcentaje" | "monto"
 
@@ -631,11 +632,17 @@ export function ProductosPanel() {
                 <Input
                   type="number"
                   value={prod.precio_lista}
+                  readOnly={prod.precio_descuento !== ""}
                   onChange={(e) => {
                     setProd({ ...prod, precio_lista: parseNumberInput(e.target.value) })
                     if (prodErrors.precio_lista) setProdErrors((prev) => ({ ...prev, precio_lista: undefined }))
                   }}
                 />
+                {prod.precio_descuento !== "" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Se calcula automáticamente desde el precio descuento y se redondea al centenar.
+                  </p>
+                ) : null}
                 {prodErrors.precio_lista && <p className="text-xs text-destructive">{prodErrors.precio_lista}</p>}
               </div>
               <div className="space-y-1">
@@ -644,7 +651,17 @@ export function ProductosPanel() {
                   type="number"
                   value={prod.precio_descuento}
                   onChange={(e) => {
-                    setProd({ ...prod, precio_descuento: parseNumberInput(e.target.value) })
+                    const precioDescuento = parseNumberInput(e.target.value)
+                    const precioListaCalculado =
+                      precioDescuento === "" ? null : calcularPrecioListaDesdeDescuento(Number(precioDescuento))
+                    setProd((prev) => ({
+                      ...prev,
+                      precio_descuento: precioDescuento,
+                      precio_lista: precioDescuento === "" ? prev.precio_lista : (precioListaCalculado ?? prev.precio_lista),
+                    }))
+                    if (prodErrors.precio_lista) {
+                      setProdErrors((prev) => ({ ...prev, precio_lista: undefined }))
+                    }
                     if (prodErrors.precio_descuento) {
                       setProdErrors((prev) => ({ ...prev, precio_descuento: undefined }))
                     }

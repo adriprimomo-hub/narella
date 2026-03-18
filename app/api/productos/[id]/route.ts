@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 const productoUpdateSchema = z
   .object({
@@ -57,8 +58,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const updatePayload: Record<string, unknown> = { updated_at: new Date() }
   if (nombre !== undefined) updatePayload.nombre = nombre
   if (descripcion !== undefined) updatePayload.descripcion = descripcion
-  if (precio_lista !== undefined) updatePayload.precio_lista = precio_lista
-  if (precio_descuento !== undefined) updatePayload.precio_descuento = precio_descuento ?? null
+  if (precio_descuento !== undefined) {
+    updatePayload.precio_descuento = precio_descuento ?? null
+    if (precio_descuento !== null) {
+      const precioListaCalculado = calcularPrecioListaDesdeDescuento(precio_descuento)
+      if (precioListaCalculado !== null) {
+        updatePayload.precio_lista = precioListaCalculado
+      }
+    } else if (precio_lista !== undefined) {
+      updatePayload.precio_lista = precio_lista
+    }
+  } else if (precio_lista !== undefined) {
+    updatePayload.precio_lista = precio_lista
+  }
   if (stock_actual !== undefined) updatePayload.stock_actual = stock_actual
   if (stock_minimo !== undefined) updatePayload.stock_minimo = stock_minimo
   if (activo !== undefined) updatePayload.activo = activo

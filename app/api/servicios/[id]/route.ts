@@ -5,6 +5,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole } from "@/lib/roles"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
+import { calcularPrecioListaDesdeDescuento } from "@/lib/precios"
 
 const servicioUpdateSchema = z
   .object({
@@ -128,11 +129,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const updatePayload: Record<string, unknown> = { updated_at: new Date() }
   if (nombre !== undefined) updatePayload.nombre = nombre
   if (duracion_minutos !== undefined) updatePayload.duracion_minutos = duracion_minutos
-  if (precio_lista !== undefined) {
+  if (precio_descuento !== undefined) {
+    updatePayload.precio_descuento = precio_descuento ?? null
+    if (precio_descuento !== null) {
+      const precioListaCalculado = calcularPrecioListaDesdeDescuento(precio_descuento)
+      if (precioListaCalculado !== null) {
+        updatePayload.precio_lista = precioListaCalculado
+        updatePayload.precio = precioListaCalculado
+      }
+    } else if (precio_lista !== undefined) {
+      updatePayload.precio_lista = precio_lista
+      updatePayload.precio = precio_lista
+    }
+  } else if (precio_lista !== undefined) {
     updatePayload.precio_lista = precio_lista
     updatePayload.precio = precio_lista
   }
-  if (precio_descuento !== undefined) updatePayload.precio_descuento = precio_descuento ?? null
   if (activo !== undefined) updatePayload.activo = activo
   if (empleadas_habilitadas !== undefined) {
     updatePayload.empleadas_habilitadas = Array.isArray(empleadas_habilitadas) ? empleadas_habilitadas : []
