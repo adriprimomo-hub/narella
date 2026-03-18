@@ -87,6 +87,12 @@ const formatHourRange = (start?: string | null, end?: string | null) => {
   return `${startLabel} - ${endLabel}`
 }
 
+const formatOfferStartLabel = (value?: string | null) => {
+  const hourLabel = formatHour(value)
+  if (hourLabel === "--:--") return "--"
+  return `${hourLabel.endsWith(":00") ? hourLabel.slice(0, -3) : hourLabel}hs`
+}
+
 const getEstadoMeta = (estado?: string | null) => {
   switch (estado) {
     case "en_curso":
@@ -391,8 +397,8 @@ export function StaffTurnosPanel() {
             <Card key={item.id} className="border-dashed">
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <CardTitle>{item.sugerencia.etiqueta}</CardTitle>
-                  <Badge variant="outline">{formatHourRange(item.sugerencia.fecha_inicio, item.sugerencia.fecha_fin)}</Badge>
+                  <CardTitle>Turno Ofrecido</CardTitle>
+                  <Badge variant="outline">{formatOfferStartLabel(item.sugerencia.fecha_inicio)}</Badge>
                 </div>
               </CardHeader>
             </Card>
