@@ -29,6 +29,17 @@ export type StaffTurnoOfrecido = {
 }
 
 type WorkingWindow = { startMinutes: number; endMinutes: number }
+type OfferedCandidate = {
+  start: Date
+  end: Date
+  startMinutes: number
+  durationMinutes: number
+  weight: number
+}
+
+const OFFERED_SLOT_STEP_MINUTES = 30
+const OFFERED_SLOT_DURATIONS = [60, 90, 120]
+const OFFERED_SLOT_GAP_MINUTES = 30
 
 const pad2 = (value: number) => String(value).padStart(2, "0")
 
@@ -214,6 +225,47 @@ const hashString = (value: string) => {
   return hash >>> 0
 }
 
+const hasIntervalConflict = (
+  interval: { start: Date; end: Date },
+  others: Array<{ start: Date; end: Date }>,
+  gapMinutes = 0,
+) => {
+  const gapMs = Math.max(0, gapMinutes) * 60_000
+
+  return others.some((other) =>
+    overlaps(
+      new Date(interval.start.getTime() - gapMs),
+      new Date(interval.end.getTime() + gapMs),
+      other.start,
+      other.end,
+    ),
+  )
+}
+
+const pickCandidate = (
+  candidates: OfferedCandidate[],
+  selected: OfferedCandidate[],
+  gapMinutes = 0,
+): OfferedCandidate | null => {
+  const usedDurations = new Set(selected.map((item) => item.durationMinutes))
+  const groups =
+    usedDurations.size > 0
+      ? [
+          candidates.filter((candidate) => !usedDurations.has(candidate.durationMinutes)),
+          candidates,
+        ]
+      : [candidates]
+
+  for (const group of groups) {
+    for (const candidate of group) {
+      if (hasIntervalConflict(candidate, selected, gapMinutes)) continue
+      return candidate
+    }
+  }
+
+  return null
+}
+
 export const buildStaffTurnosOfrecidos = (args: {
   turnos: StaffAgendaTurnoBase[]
   staffHorarios?: StaffHorario[] | null
@@ -251,30 +303,74 @@ export const buildStaffTurnosOfrecidos = (args: {
     .map((turno) => getTurnoInterval(turno))
     .filter(Boolean) as Array<{ start: Date; end: Date }>
 
-  const candidates: Date[] = []
-  for (let cursor = workingWindow.startMinutes; cursor + 60 <= workingWindow.endMinutes; cursor += 60) {
-    const start = new Date(todayRange.start.getTime() + cursor * 60_000)
-    const end = new Date(start.getTime() + 60 * 60_000)
-    const hasOverlap = occupiedIntervals.some((interval) => overlaps(start, end, interval.start, interval.end))
-    if (!hasOverlap) {
-      candidates.push(start)
+  const candidates: OfferedCandidate[] = []
+  for (
+    let cursor = workingWindow.startMinutes;
+    cursor + Math.min(...OFFERED_SLOT_DURATIONS) <= workingWindow.endMinutes;
+    cursor += OFFERED_SLOT_STEP_MINUTES
+  ) {
+    for (const durationMinutes of OFFERED_SLOT_DURATIONS) {
+      if (cursor + durationMinutes > workingWindow.endMinutes) continue
+
+      const start = new Date(todayRange.start.getTime() + cursor * 60_000)
+      const end = new Date(start.getTime() + durationMinutes * 60_000)
+      const hasOverlap = occupiedIntervals.some((interval) => overlaps(start, end, interval.start, interval.end))
+      if (hasOverlap) continue
+
+      candidates.push({
+        start,
+        end,
+        startMinutes: cursor,
+        durationMinutes,
+        weight: hashString(`${todayRange.dateKey}:${args.staffId}:${cursor}:${durationMinutes}`),
+      })
     }
   }
 
-  return candidates
-    .map((start) => ({
-      start,
-      weight: hashString(`${todayRange.dateKey}:${args.staffId}:${start.toISOString()}`),
-    }))
-    .sort((a, b) => a.weight - b.weight)
-    .slice(0, limit)
-    .map(({ start }) => ({
-      id: `ofrecido-${args.staffId}-${start.toISOString()}`,
+  const orderedCandidates = [...candidates].sort((left, right) => {
+    if (left.weight !== right.weight) return left.weight - right.weight
+    if (left.startMinutes !== right.startMinutes) return left.startMinutes - right.startMinutes
+    return right.durationMinutes - left.durationMinutes
+  })
+
+  const selected: OfferedCandidate[] = []
+  const totalMinutes = workingWindow.endMinutes - workingWindow.startMinutes
+  const segmentCount = Math.max(1, limit)
+
+  for (let segmentIndex = 0; segmentIndex < segmentCount && selected.length < limit; segmentIndex += 1) {
+    const segmentStart =
+      workingWindow.startMinutes + Math.floor((totalMinutes * segmentIndex) / segmentCount)
+    const segmentEnd =
+      workingWindow.startMinutes + Math.floor((totalMinutes * (segmentIndex + 1)) / segmentCount)
+
+    const segmentCandidates = orderedCandidates.filter((candidate) => {
+      if (candidate.startMinutes < segmentStart) return false
+      if (segmentIndex === segmentCount - 1) return candidate.startMinutes <= segmentEnd
+      return candidate.startMinutes < segmentEnd
+    })
+
+    const picked = pickCandidate(segmentCandidates, selected, OFFERED_SLOT_GAP_MINUTES)
+    if (picked) selected.push(picked)
+  }
+
+  if (selected.length < limit) {
+    for (const gapMinutes of [OFFERED_SLOT_GAP_MINUTES, 0]) {
+      while (selected.length < limit) {
+        const picked = pickCandidate(orderedCandidates, selected, gapMinutes)
+        if (!picked) break
+        selected.push(picked)
+      }
+    }
+  }
+
+  return selected
+    .sort((a, b) => a.start.getTime() - b.start.getTime())
+    .map(({ start, end, durationMinutes }) => ({
+      id: `ofrecido-${args.staffId}-${start.toISOString()}-${durationMinutes}`,
       tipo: "ofrecido" as const,
       estado: "ofrecido" as const,
       fecha_inicio: start.toISOString(),
-      fecha_fin: new Date(start.getTime() + 60 * 60_000).toISOString(),
+      fecha_fin: end.toISOString(),
       etiqueta: "Turno ofrecido",
     }))
-    .sort((a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime())
 }

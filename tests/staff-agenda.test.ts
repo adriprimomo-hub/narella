@@ -104,8 +104,20 @@ describe("staff agenda helpers", () => {
         return start >= range.start && start < range.end && end > start
       }),
     ).toBe(true)
-    expect(offered.every((slot) => !["2026-03-18T13:00:00.000Z", "2026-03-18T17:00:00.000Z"].includes(slot.fecha_inicio))).toBe(
-      true,
+    expect(
+      offered.every((slot) => {
+        const durationMinutes = (new Date(slot.fecha_fin).getTime() - new Date(slot.fecha_inicio).getTime()) / 60_000
+        return [60, 90, 120].includes(durationMinutes)
+      }),
+    ).toBe(true)
+    expect(
+      offered.every((slot) => {
+        const minute = new Date(slot.fecha_inicio).getUTCMinutes()
+        return minute === 0 || minute === 30
+      }),
+    ).toBe(true)
+    expect(new Date(offered[1].fecha_inicio).getTime()).toBeGreaterThanOrEqual(
+      new Date("2026-03-18T17:00:00.000Z").getTime(),
     )
   })
 
@@ -129,5 +141,25 @@ describe("staff agenda helpers", () => {
         return start >= range.start && start < range.end
       }),
     ).toBe(true)
+  })
+
+  it("spreads the offered slots across the day when there is enough room", () => {
+    const now = new Date("2026-03-18T10:00:00.000Z")
+    const range = getTodayRangeInTimeZone({ now, timeZone: AR_TIMEZONE })
+
+    const offered = buildStaffTurnosOfrecidos({
+      turnos: [],
+      staffHorarios: [{ dia: range.day, desde: "09:00", hasta: "19:00" }],
+      localHorarios: [{ dia: range.day, desde: "09:00", hasta: "19:00", activo: true }],
+      staffId: "staff-2",
+      now,
+      timeZone: AR_TIMEZONE,
+    })
+
+    expect(offered).toHaveLength(2)
+    expect(new Date(offered[0].fecha_inicio).getTime()).toBeLessThan(new Date("2026-03-18T17:30:00.000Z").getTime())
+    expect(new Date(offered[1].fecha_inicio).getTime()).toBeGreaterThanOrEqual(
+      new Date("2026-03-18T17:30:00.000Z").getTime(),
+    )
   })
 })
