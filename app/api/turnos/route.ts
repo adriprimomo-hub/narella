@@ -5,6 +5,7 @@ import { getUserRole } from "@/lib/permissions"
 import { isAdminRole, isStaffRole } from "@/lib/roles"
 import { getEmpleadaIdForUser } from "@/lib/permissions"
 import { isWithinPastSchedulingWindow, MAX_TURNO_PAST_SCHEDULE_HOURS } from "@/lib/turnos/scheduling"
+import { getTodayRangeInTimeZone } from "@/lib/turnos/staff-agenda"
 import { selectTenantConfiguracionRow } from "@/lib/tenant-configuracion"
 import { z } from "zod"
 import { validateBody } from "@/lib/api/validation"
@@ -40,6 +41,12 @@ const isEmpleadaHabilitada = (servicio: any, empleadaId: string) => {
   return habilitadas.includes(empleadaId)
 }
 
+const stripComision = (servicio: any) => {
+  if (!servicio) return servicio
+  const { empleadas_comision: _omit, ...rest } = servicio
+  return { ...rest, comision_pct: null, comision_monto_fijo: null }
+}
+
 const stripTurnoPhoto = (turno: any) => {
   const fotoTrabajoDisponible = Boolean(turno?.foto_trabajo_storage_path || turno?.foto_trabajo_base64)
   const {
@@ -56,6 +63,18 @@ const stripTurnoPhoto = (turno: any) => {
   }
 }
 
+const sanitizeStaffTurno = (turno: any) =>
+  stripTurnoPhoto({
+    ...turno,
+    clientes: null,
+    empleadas: null,
+    empleada_final: null,
+    declaracion_jurada_plantilla: null,
+    declaracion_jurada_respuesta: null,
+    servicios: stripComision(turno.servicios),
+    servicio_final: stripComision(turno.servicio_final),
+  })
+
 export async function GET(request: Request) {
   const db = await createClient()
   const {
@@ -65,6 +84,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const username = user.username || (user.user_metadata as any)?.username || user.id
   const role = await getUserRole(db, user.id)
+  const isStaff = isStaffRole(role)
   const isAdmin = isAdminRole(role)
   const tenantId = getTenantId(user)
 
@@ -89,47 +109,34 @@ export async function GET(request: Request) {
     `)
     .eq("usuario_id", tenantId)
 
-  if (fechaInicio) query = query.gte("fecha_inicio", fechaInicio)
-  if (fechaFin) query = query.lte("fecha_inicio", fechaFin)
-  if (clienteId) query = query.eq("cliente_id", clienteId)
-  if (empleadaId) query = query.eq("empleada_id", empleadaId)
-  if (estado) query = query.eq("estado", estado)
+  if (isStaff) {
+    const todayRange = getTodayRangeInTimeZone()
+    query = query.gte("fecha_inicio", todayRange.start.toISOString()).lt("fecha_inicio", todayRange.end.toISOString())
+  } else {
+    if (fechaInicio) query = query.gte("fecha_inicio", fechaInicio)
+    if (fechaFin) query = query.lte("fecha_inicio", fechaFin)
+    if (clienteId) query = query.eq("cliente_id", clienteId)
+    if (empleadaId) query = query.eq("empleada_id", empleadaId)
+    if (estado) query = query.eq("estado", estado)
+  }
 
   const { data, error } = await query.order("fecha_inicio", { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Staff: solo turnos en curso asignados a su empleada
-  if (isStaffRole(role)) {
+  // Staff: solo agenda real del día actual asignada a su empleada
+  if (isStaff) {
     const empleadaIdStaff = await getEmpleadaIdForUser(db, user.id)
-    const filteredData = (data || []).filter(
-      (turno: any) =>
-        turno.estado === "en_curso" &&
-        (turno.empleada_id === empleadaIdStaff || turno.empleada_final_id === empleadaIdStaff),
-    )
-    const stripComision = (servicio: any) => {
-      if (!servicio) return servicio
-      const { empleadas_comision: _omit, ...rest } = servicio
-      return { ...rest, comision_pct: null, comision_monto_fijo: null }
-    }
-    return NextResponse.json(
-      filteredData.map((turno: any) =>
-        stripTurnoPhoto({
-          ...turno,
-          servicios: stripComision(turno.servicios),
-          servicio_final: stripComision(turno.servicio_final),
-        }),
-      ),
-    )
+    if (!empleadaIdStaff) return NextResponse.json([])
+    const filteredData = (data || []).filter((turno: any) => {
+      const isAssigned = turno.empleada_id === empleadaIdStaff || turno.empleada_final_id === empleadaIdStaff
+      const isVisible = turno.estado !== "cancelado" && turno.confirmacion_estado !== "cancelado"
+      return isAssigned && isVisible
+    })
+    return NextResponse.json(filteredData.map((turno: any) => sanitizeStaffTurno(turno)))
   }
 
   if (isAdmin) return NextResponse.json((data || []).map((turno: any) => stripTurnoPhoto(turno)))
-
-  const stripComision = (servicio: any) => {
-    if (!servicio) return servicio
-    const { empleadas_comision: _omit, ...rest } = servicio
-    return { ...rest, comision_pct: null, comision_monto_fijo: null }
-  }
 
   const sanitized =
     data?.map((turno: any) => ({

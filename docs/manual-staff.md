@@ -1,19 +1,20 @@
 # Manual de Usuario - Rol Staff
 
 ## Objetivo del rol
-El rol `staff` esta pensado para ejecutar y registrar trabajo sobre turnos ya iniciados.
+El rol `staff` esta pensado para trabajar la agenda del dia y registrar lo realizado en turnos que ya estan en curso.
 Su foco es operativo, no administrativo.
 
 ## Que puede ver y usar
 Con este rol solo se habilita la seccion **Turnos** del dashboard.
 Dentro de Turnos, se muestra el panel de staff con:
 
-- Lista de turnos en estado `en_curso`.
-- Datos de clienta y horario de inicio.
-- Servicio original y servicio final realizado.
+- Lista en cards de los turnos asignados para **el dia actual**.
+- Vista reducida con servicio y horario.
+- Turnos `en_curso` con acceso a modificacion.
 - Carga de servicios agregados.
 - Carga de productos vendidos.
 - Carga y visualizacion de foto de trabajo.
+- Si la agenda del dia esta por debajo del 50% de la capacidad estimada (1 servicio por hora dentro del horario configurado), aparecen hasta 2 cards de **Turno ofrecido** dentro de su horario laboral.
 
 ## Que NO puede hacer
 El rol `staff` no puede acceder a:
@@ -27,8 +28,8 @@ El rol `staff` no puede acceder a:
 ## Flujo diario recomendado
 1. Ingresar al sistema con usuario y clave.
 2. Ir a `Dashboard > Turnos`.
-3. Revisar turnos `en_curso`.
-4. Abrir el turno correspondiente con **Modificar**.
+3. Revisar la agenda del dia.
+4. Cuando un turno este `en_curso`, abrirlo con **Modificar**.
 5. Completar lo que se realizo:
    - Servicio final.
    - Servicios agregados (si hubo).
@@ -71,8 +72,9 @@ El rol `staff` no puede acceder a:
 
 ## Problemas comunes y solucion
 ### No veo turnos
-- El panel staff solo muestra turnos `en_curso`.
-- Confirmar con recepcion que el turno haya sido iniciado.
+- El panel staff solo muestra lo asignado para **hoy**.
+- No se muestran dias pasados ni dias futuros.
+- Si hoy no hay nada asignado, el panel queda vacio.
 
 ### No puedo guardar
 - Revisar que todas las cantidades de servicios/productos agregados sean mayores a 0.

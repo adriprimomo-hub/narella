@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/localdb/server"
+import { getTenantId } from "@/lib/localdb/session"
 import { getEmpleadaIdForUser, getUserRole } from "@/lib/permissions"
 import { isStaffRole } from "@/lib/roles"
 import { downloadStorageObject, parseDataUrl } from "@/lib/supabase/storage"
@@ -14,6 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const tenantId = getTenantId(user)
 
   const { data: turno, error: turnoError } = await db
     .from("turnos")
@@ -21,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       "id, empleada_id, empleada_final_id, foto_trabajo_base64, foto_trabajo_storage_bucket, foto_trabajo_storage_path, foto_trabajo_mime_type",
     )
     .eq("id", id)
-    .eq("usuario_id", user.id)
+    .eq("usuario_id", tenantId)
     .single()
 
   if (turnoError || !turno) {

@@ -9,7 +9,7 @@ Funciona con arquitectura multi-tenant: cada negocio opera con sus propios datos
 - `admin`: acceso total, configuracion y control operativo/financiero.
 - `recepcion`: operacion diaria de turnos, clientes, servicios, cobros y facturacion.
 - `caja`: operacion de caja y modulos operativos sin configuracion avanzada.
-- `staff`: ejecucion de trabajo en turnos en curso (panel especializado).
+- `staff`: ejecucion de trabajo desde un panel especializado con agenda del dia y edicion limitada a turnos en curso.
 - `solo_turnos`: acceso reducido a agenda de turnos.
 
 ## Modulos principales
