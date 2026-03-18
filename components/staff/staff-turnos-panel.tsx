@@ -400,7 +400,7 @@ export function StaffTurnosPanel() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1">
                     <CardTitle>{item.sugerencia.etiqueta}</CardTitle>
-                    <CardDescription>Te queda libre dentro de tu horario de hoy.</CardDescription>
+                    <CardDescription>Es un hueco libre dentro de tu agenda de hoy.</CardDescription>
                   </div>
                   <Badge variant="outline">{formatHourRange(item.sugerencia.fecha_inicio, item.sugerencia.fecha_fin)}</Badge>
                 </div>

@@ -67,7 +67,7 @@ describe("staff agenda helpers", () => {
     expect(offered).toEqual([])
   })
 
-  it("builds up to two free future slots without overlapping existing turnos", () => {
+  it("builds up to two free slots inside the current day without overlapping existing turnos", () => {
     const now = new Date("2026-03-18T15:15:00.000Z")
     const range = getTodayRangeInTimeZone({ now, timeZone: AR_TIMEZONE })
 
@@ -93,13 +93,41 @@ describe("staff agenda helpers", () => {
       timeZone: AR_TIMEZONE,
     })
 
-    expect(offered.map((slot) => slot.fecha_inicio)).toEqual([
-      "2026-03-18T16:00:00.000Z",
-      "2026-03-18T19:00:00.000Z",
-    ])
-    expect(offered.map((slot) => slot.fecha_fin)).toEqual([
-      "2026-03-18T17:00:00.000Z",
-      "2026-03-18T20:00:00.000Z",
-    ])
+    expect(offered).toHaveLength(2)
+    expect(offered.map((slot) => slot.fecha_inicio)).toEqual(
+      [...offered.map((slot) => slot.fecha_inicio)].sort((left, right) => left.localeCompare(right)),
+    )
+    expect(
+      offered.every((slot) => {
+        const start = new Date(slot.fecha_inicio)
+        const end = new Date(slot.fecha_fin)
+        return start >= range.start && start < range.end && end > start
+      }),
+    ).toBe(true)
+    expect(offered.every((slot) => !["2026-03-18T13:00:00.000Z", "2026-03-18T17:00:00.000Z"].includes(slot.fecha_inicio))).toBe(
+      true,
+    )
+  })
+
+  it("still offers two daily slots even when there are no future hours left", () => {
+    const now = new Date("2026-03-18T22:15:00.000Z")
+    const range = getTodayRangeInTimeZone({ now, timeZone: AR_TIMEZONE })
+
+    const offered = buildStaffTurnosOfrecidos({
+      turnos: [],
+      staffHorarios: [{ dia: range.day, desde: "09:00", hasta: "17:00" }],
+      localHorarios: [{ dia: range.day, desde: "09:00", hasta: "17:00", activo: true }],
+      staffId: "staff-1",
+      now,
+      timeZone: AR_TIMEZONE,
+    })
+
+    expect(offered).toHaveLength(2)
+    expect(
+      offered.every((slot) => {
+        const start = new Date(slot.fecha_inicio)
+        return start >= range.start && start < range.end
+      }),
+    ).toBe(true)
   })
 })

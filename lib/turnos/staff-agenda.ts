@@ -255,7 +255,6 @@ export const buildStaffTurnosOfrecidos = (args: {
   for (let cursor = workingWindow.startMinutes; cursor + 60 <= workingWindow.endMinutes; cursor += 60) {
     const start = new Date(todayRange.start.getTime() + cursor * 60_000)
     const end = new Date(start.getTime() + 60 * 60_000)
-    if (start.getTime() < now.getTime()) continue
     const hasOverlap = occupiedIntervals.some((interval) => overlaps(start, end, interval.start, interval.end))
     if (!hasOverlap) {
       candidates.push(start)
