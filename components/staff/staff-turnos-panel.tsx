@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -79,47 +79,10 @@ const formatHour = (value?: string | null) => {
   return date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
-const formatHourRange = (start?: string | null, end?: string | null) => {
-  const startLabel = formatHour(start)
-  const endLabel = formatHour(end)
-  if (startLabel === "--:--") return endLabel
-  if (endLabel === "--:--") return startLabel
-  return `${startLabel} - ${endLabel}`
-}
-
 const formatOfferStartLabel = (value?: string | null) => {
   const hourLabel = formatHour(value)
   if (hourLabel === "--:--") return "--"
   return `${hourLabel.endsWith(":00") ? hourLabel.slice(0, -3) : hourLabel}hs`
-}
-
-const getEstadoMeta = (estado?: string | null) => {
-  switch (estado) {
-    case "en_curso":
-      return {
-        label: "En curso",
-        variant: "info" as const,
-        description: "Lo tenes en marcha ahora.",
-      }
-    case "completado":
-      return {
-        label: "Listo",
-        variant: "success" as const,
-        description: "Ya quedo cerrado.",
-      }
-    case "pendiente":
-      return {
-        label: "Pendiente",
-        variant: "neutral" as const,
-        description: "Lo tenes agendado para hoy.",
-      }
-    default:
-      return {
-        label: "Hoy",
-        variant: "outline" as const,
-        description: "Forma parte de tu dia de hoy.",
-      }
-  }
 }
 
 export function StaffTurnosPanel() {
@@ -407,7 +370,6 @@ export function StaffTurnosPanel() {
 
         const turno = item.turno
         const isEditing = editingTurnoId === turno.id
-        const estadoMeta = getEstadoMeta(turno.estado)
         const servicioVisible = servicios.find(
           (servicio) => servicio.id === (isEditing ? servicioFinalId : turno.servicio_final_id || turno.servicio_id),
         )
@@ -418,36 +380,13 @@ export function StaffTurnosPanel() {
           <Card key={turno.id}>
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <CardTitle>{servicioNombre}</CardTitle>
-                  <CardDescription>{estadoMeta.description}</CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{formatHourRange(turno.fecha_inicio, turno.fecha_fin)}</Badge>
-                  <Badge variant={estadoMeta.variant}>{estadoMeta.label}</Badge>
-                </div>
+                <CardTitle>{servicioNombre}</CardTitle>
+                <Badge variant="outline">{formatOfferStartLabel(turno.fecha_inicio)}</Badge>
               </div>
             </CardHeader>
 
-            <CardContent className="space-y-4">
-              {!isEditing ? (
-                <div className="space-y-2">
-                  {turno.estado === "en_curso" ? (
-                    <>
-                      <p className="text-sm text-muted-foreground">Abre el turno si necesitas cargar cambios.</p>
-                      <Button onClick={() => startEditing(turno)} className="mt-2">
-                        Abrir turno
-                      </Button>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {turno.estado === "completado"
-                        ? "Ya quedo cerrado y se mantiene solo por hoy."
-                        : "Lo veras aqui hasta que cambie el estado o termine el dia."}
-                    </p>
-                  )}
-                </div>
-              ) : (
+            {isEditing ? (
+              <CardContent className="space-y-4">
                 <div className="space-y-4">
                   <div>
                     <p className="mb-2 text-sm font-medium">Servicio realizado</p>
@@ -698,8 +637,12 @@ export function StaffTurnosPanel() {
                     </Button>
                   </div>
                 </div>
-              )}
-            </CardContent>
+              </CardContent>
+            ) : turno.estado === "en_curso" ? (
+              <CardContent>
+                <Button onClick={() => startEditing(turno)}>Abrir turno</Button>
+              </CardContent>
+            ) : null}
           </Card>
         )
       })}
