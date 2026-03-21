@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SicaipFooter } from "@/components/ui/sicaip-footer"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CalendarDaysIcon, Clock3Icon, SparklesIcon, UserIcon } from "lucide-react"
@@ -214,6 +215,8 @@ export default function ConfirmacionPage() {
               {confirmado ? "¡Gracias por confirmar tu turno!" : "Tu turno ha sido cancelado."}
             </div>
           )}
+
+          <SicaipFooter />
         </CardContent>
       </Card>
     </div>

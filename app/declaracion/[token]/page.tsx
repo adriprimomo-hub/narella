@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SicaipFooter } from "@/components/ui/sicaip-footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -387,6 +388,8 @@ export default function DeclaracionJuradaPage() {
               </Button>
             </div>
           )}
+
+          <SicaipFooter />
         </CardContent>
       </Card>
     </div>
